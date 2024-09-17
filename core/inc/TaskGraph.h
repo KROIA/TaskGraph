@@ -7,5 +7,7 @@
 #include "TaskGraph_info.h"
 
 /// USER_SECTION_START 2
+#include "Task.h"
+#include "TaskScheduler.h"
 
 /// USER_SECTION_END

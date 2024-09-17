@@ -40,7 +40,7 @@ set(LIB_PROFILE_DEFINE TG_PROFILING)  # <LIB_PROFILE_DEFINE>
 
 
 # Enable/disable QT modules
-set(QT_ENABLE OFF)	                            # <AUTO_REPLACED> 
+set(QT_ENABLE ON)	                            # <AUTO_REPLACED> 
 # Enable/disable QT deployment
 set_if_not_defined(QT_DEPLOY ON)	            # <AUTO_REPLACED> 
 

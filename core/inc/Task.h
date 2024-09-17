@@ -16,6 +16,7 @@ namespace TaskGraph
 		public:
 
 		Task(const std::string &name);
+		Task(const Task& other);
 		virtual ~Task();
 
 		// Get the name of the task
@@ -31,7 +32,7 @@ namespace TaskGraph
 		bool clearDependencies();
 		const std::vector<std::shared_ptr<Task>>& getDependencies() const { return m_dependencies; }
 
-		void runTask();
+		bool runTask();
 		bool isRunning() const { return m_isRunning; }
 		bool isDone() const { return m_done; }
 		void reset();

@@ -4,10 +4,21 @@
 namespace TaskGraph
 {
 	Task::Task(const std::string& name)
-		: m_name(name)
+		: QObject()
+		, m_name(name)
 		, m_isRunning(false)
 		, m_done(false)
 	{
+		m_workFunction = nullptr;
+	}
+	Task::Task(const Task& other)
+		: QObject()
+		, m_name(other.m_name)
+		, m_isRunning(false)
+		, m_done(false)
+	{
+		m_workFunction = other.m_workFunction;
+		m_dependencies = other.m_dependencies;
 
 	}
 	Task::~Task()
@@ -15,17 +26,17 @@ namespace TaskGraph
 
 	}
 
-	void Task::runTask()
+	bool Task::runTask()
 	{
 		if (m_isRunning)
 		{
 			Internal::TaskGraphLogger::logError("Task is already running");
-			return;
+			return false;
 		}
 		if (!checkDependencies())
 		{
 			Internal::TaskGraphLogger::logError("Task can't run because some dependencies aren't processed");
-			return;
+			return false;
 		}
 		m_isRunning = true;
 		Internal::TaskGraphLogger::logInfo("Task " + m_name + " started");
@@ -38,6 +49,7 @@ namespace TaskGraph
 		emit compleeted();
 		m_isRunning = false;
 		m_done = true;
+		return true;
 	}
 
 	void Task::reset()
