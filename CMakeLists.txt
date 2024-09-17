@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 
 
 ## INFO
-## Template version: 1.2.2
+## Template version: 1.2.3
 ##
 ## This is a template for a CMake project.
 ## It is designed to be used with the Visual Studio
@@ -46,7 +46,8 @@ set_if_not_defined(QT_DEPLOY ON)	            # <AUTO_REPLACED>
 
 # Needed QT modules                             # <AUTO_REPLACED> 
 set(QT_MODULES
-    Core
+  Core
+  Widgets
 )
 
 # Library file name settings

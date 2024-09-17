@@ -48,14 +48,17 @@ project(${PROJECT_NAME})
 # QT settings
 if(QT_ENABLE)
     message("Using QT modules: ${QT_MODULES} for Example: ${PROJECT_NAME}")
+
     list(LENGTH QT_MODULES list_length)
     if(NOT list_length EQUAL 0)
         find_package(${QT_PACKAGE_NAME} REQUIRED COMPONENTS ${QT_MODULES})
-        set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
-    #set(CMAKE_AUTOUIC ON)
-    endif()
 
+        set(CMAKE_AUTOMOC ON)
+        set(CMAKE_AUTORCC ON)
+        #set(CMAKE_AUTOUIC ON)
+    else()
+        message("ERROR: QT_MODULES is empty. Please specify the required modules or set the variable \"QT_ENABLE\" to OFF")
+    endif()
 endif()
 # end QT settings
 

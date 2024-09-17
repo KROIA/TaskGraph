@@ -1,8 +1,17 @@
 #include "Task.h"
 #include "TaskGraphLogger.h"
+#include "CrashReport.h"
 
 namespace TaskGraph
 {
+	Task::Task()
+		: QObject()
+		, m_name("Task")
+		, m_isRunning(false)
+		, m_done(false)
+	{
+		m_workFunction = nullptr;
+	}
 	Task::Task(const std::string& name)
 		: QObject()
 		, m_name(name)
@@ -28,6 +37,8 @@ namespace TaskGraph
 
 	bool Task::runTask()
 	{
+		TG_SCHEDULER_PROFILING_BLOCK(m_name.c_str(), TG_COLOR_STAGE_1);
+		STACK_WATCHER_FUNC;
 		if (m_isRunning)
 		{
 			Internal::TaskGraphLogger::logError("Task is already running");
@@ -35,7 +46,7 @@ namespace TaskGraph
 		}
 		if (!checkDependencies())
 		{
-			Internal::TaskGraphLogger::logError("Task can't run because some dependencies aren't processed");
+			Internal::TaskGraphLogger::logError("Task: \""+m_name+"\" can't run because some dependencies aren't processed");
 			return false;
 		}
 		m_isRunning = true;
@@ -63,9 +74,7 @@ namespace TaskGraph
 		for (const auto& dep : m_dependencies)
 		{
 			if (!dep->isDone())
-			{
 				return false;
-			}
 		}
 		return true;
 	}
@@ -76,6 +85,16 @@ namespace TaskGraph
 		{
 			Internal::TaskGraphLogger::logError("Can't add dependencies to a running task");
 			return false;
+		}
+		if(task.get() == this)
+		{
+			Internal::TaskGraphLogger::logError("Can't add task as dependency to itself");
+			return false;
+		}
+		for (const auto& dep : m_dependencies)
+		{
+			if (dep == task)
+				return true;
 		}
 		m_dependencies.push_back(task);
 		return true;
