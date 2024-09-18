@@ -39,6 +39,11 @@ namespace TaskGraph
 	{
 		TG_SCHEDULER_PROFILING_BLOCK(m_name.c_str(), TG_COLOR_STAGE_1);
 		STACK_WATCHER_FUNC;
+		if(m_done)
+		{
+			Internal::TaskGraphLogger::logError("Task is already done");
+			return false;
+		}
 		if (m_isRunning)
 		{
 			Internal::TaskGraphLogger::logError("Task is already running");

@@ -1,5 +1,6 @@
 #pragma once
 #include "TaskGraph_global.h"
+#include "Logger.h"
 
 /// USER_SECTION_START 1
 

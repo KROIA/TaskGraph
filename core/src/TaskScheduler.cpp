@@ -24,16 +24,31 @@ namespace TaskGraph
 			m_asyncThread->join();
 	}
 
-	void TaskScheduler::enableThreads(size_t threadCount)
+	bool TaskScheduler::enableThreads(size_t threadCount)
 	{
+		m_lastError = Error::noError;
+		if (m_isRunning)
+		{
+			Internal::TaskGraphLogger::logError("Cannot enable threads while the TaskScheduler is running");
+			m_lastError = Error::busy;
+			return false;
+		}
 		disableThreads();
 		for (size_t i = 0; i < threadCount; ++i)
 			m_threads.push_back(std::make_shared<std::thread>(taskThreadFunction, this, i));
+		return true;
 	}
-	void TaskScheduler::disableThreads()
+	bool TaskScheduler::disableThreads()
 	{
+		m_lastError = Error::noError;
+		if (m_isRunning)
+		{
+			Internal::TaskGraphLogger::logError("Cannot disable threads while the TaskScheduler is running");
+			m_lastError = Error::busy;
+			return false;
+		}
 		if (m_threads.size() == 0)
-			return;
+			return true;
 
 		m_stopThreads = true;
 		m_cvTask.notify_all();
@@ -42,13 +57,26 @@ namespace TaskGraph
 			thread->join();
 		m_stopThreads = false;
 		m_threads.clear();
+		return true;
 	}
-	void TaskScheduler::addTask(const std::shared_ptr<Task>& task)
+	bool TaskScheduler::addTask(const std::shared_ptr<Task>& task)
 	{
+		m_lastError = Error::noError;
+		for (const auto& t : m_allTasks)
+		{
+			if (t == task)
+			{
+				Internal::TaskGraphLogger::logError("Task already added to the TaskScheduler");
+				m_lastError = Error::taskAlreadyAdded;
+				return false;
+			}
+		}
 		m_allTasks.push_back(task);
+		m_taskGraph.clear();
+		return true;
 	}
 
-	TaskScheduler::Error TaskScheduler::buildTaskGraph()
+	TaskScheduler::Error TaskScheduler::buildTaskGraph(std::vector<TaskList> &taskGraph) const
 	{
 		TG_SCHEDULER_PROFILING_FUNCTION(TG_COLOR_STAGE_2);
 		struct Node
@@ -80,8 +108,8 @@ namespace TaskGraph
 
 
 		
-		m_taskGraph.clear();
-		m_taskGraph.push_back(std::vector<std::shared_ptr<Task>>());
+		taskGraph.clear();
+		taskGraph.push_back(std::vector<std::shared_ptr<Task>>());
 
 		// Build the graph
 		while (true)
@@ -116,7 +144,7 @@ namespace TaskGraph
 			{
 				nodes[layer[i]].isVisited = true;
 			}
-			m_taskGraph.push_back(layer);
+			taskGraph.push_back(layer);
 		}
 		return Error::noError;
 	}
@@ -136,7 +164,7 @@ namespace TaskGraph
 		
 
 		// Build the task graph
-		Error error = buildTaskGraph();
+		Error error = buildTaskGraph(m_taskGraph);
 		if (error != Error::noError)
 		{
 			Internal::TaskGraphLogger::logError("Error building task graph: " + std::to_string(error));
@@ -217,9 +245,19 @@ namespace TaskGraph
 		m_taskGraph.clear();
 	}
 
+	std::vector<TaskList> TaskScheduler::getTaskGraph() const
+	{
+		if (m_taskGraph.size() > 0)
+			return m_taskGraph;
+		std::vector<TaskList> taskGraph;
+		buildTaskGraph(taskGraph);
+		return taskGraph;
+	}
+
 
 	void TaskScheduler::taskThreadFunction(TaskScheduler* obj, int threadIndex)
 	{
+		threadIndex;
 		TG_SCHEDULER_PROFILING_THREAD(std::string("TaskThread["+std::to_string(threadIndex)+"]").c_str());
 		STACK_WATCHER_FUNC;
 		//Log::LogObject log("Thread "+std::to_string(std::this_thread::get_id()._Get_underlying_id()));

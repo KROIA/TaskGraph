@@ -105,8 +105,21 @@ namespace TaskGraph
 		bool checkDependencies();
 
 		signals:
+		// Signals can be emitted from different threads
+
+		/// <summary>
+		/// Gets emitted when the task gets executed
+		/// </summary>
 		void started();
+
+		/// <summary>
+		/// Gets emitted when the task has completed execution
+		/// </summary>
 		void compleeted();
+
+		/// <summary>
+		/// Gets emitted when the task has been resetted
+		/// </summary>
 		void resetted();
 
 		protected:
@@ -118,7 +131,6 @@ namespace TaskGraph
 		virtual void work();
 	
 		private:
-		
 		std::string m_name;
 		std::atomic<bool> m_isRunning;
 		std::atomic<bool> m_done;
