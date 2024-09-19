@@ -116,6 +116,15 @@ else()
 endif()
 
 list(APPEND DEFINES BUILD_STATIC)
+# Add the names of the dependencies as a define
+foreach(DEPENDENCY ${DEPENDENCY_NAME_MACRO})
+	list(APPEND DEFINES ${DEPENDENCY})
+endforeach()
+
+foreach(DEF ${USER_SPECIFIC_DEFINES})
+	list(APPEND DEFINES ${DEF})
+endforeach()
+
 target_compile_definitions(${PROJECT_NAME} PUBLIC ${DEFINES})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION "${INSTALL_BIN_PATH}")

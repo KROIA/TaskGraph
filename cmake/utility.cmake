@@ -84,4 +84,3 @@ function(set_if_not_defined varName value)
         set(${varName} ${value} PARENT_SCOPE)
     endif()
 endfunction()
-
