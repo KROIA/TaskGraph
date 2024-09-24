@@ -37,7 +37,7 @@ namespace TaskGraph
 
 	bool Task::runTask()
 	{
-		TG_SCHEDULER_PROFILING_BLOCK(m_name.c_str(), TG_COLOR_STAGE_1);
+		TG_TASK_PROFILING_BLOCK(m_name.c_str(), TG_COLOR_STAGE_1);
 		STACK_WATCHER_FUNC;
 		if(m_done)
 		{
