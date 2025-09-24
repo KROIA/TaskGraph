@@ -11,13 +11,13 @@
 #ifndef BUILD_STATIC
 	//#pragma message("TASKGRAPH_LIB is a shared library")
 	#if defined(TASKGRAPH_LIB)
-		#define TASK_GRAPH_EXPORT __declspec(dllexport)
+		#define TASK_GRAPH_API __declspec(dllexport)
 	#else
-		#define TASK_GRAPH_EXPORT __declspec(dllimport)
+		#define TASK_GRAPH_API __declspec(dllimport)
 	#endif
 #else 
 	//#pragma message("TASKGRAPH_LIB is a static library")
-	#define TASK_GRAPH_EXPORT
+	#define TASK_GRAPH_API
 #endif
 
 /// USER_SECTION_START 2

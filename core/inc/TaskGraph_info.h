@@ -29,7 +29,7 @@ namespace TaskGraph
 
 /// USER_SECTION_END
 
-	class TASK_GRAPH_EXPORT LibraryInfo
+	class TASK_GRAPH_API LibraryInfo
 	{
 		LibraryInfo() = delete;
 		LibraryInfo(const LibraryInfo&) = delete;

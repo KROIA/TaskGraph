@@ -89,7 +89,7 @@ namespace TaskGraph
 /// USER_SECTION_START 4
 
 /// USER_SECTION_END
-	class TASK_GRAPH_EXPORT Profiler
+	class TASK_GRAPH_API Profiler
 	{
 	public:
 		/// USER_SECTION_START 5
@@ -112,7 +112,7 @@ namespace TaskGraph
 
 
 #if LOGGER_LIBRARY_AVAILABLE == 1
-	class TASK_GRAPH_EXPORT Logger 
+	class TASK_GRAPH_API Logger 
 	{
 		/// USER_SECTION_START 8
 
