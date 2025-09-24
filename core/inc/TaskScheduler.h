@@ -19,7 +19,7 @@ namespace TaskGraph
 	/// The TaskScheduler will run the tasks in the correct order.
 	/// Independent Tasks will be run in parallel.
 	/// </summary>
-	class TASK_GRAPH_EXPORT TaskScheduler : public QObject
+	class TASK_GRAPH_API TaskScheduler : public QObject
 	{
 		Q_OBJECT
 		public:

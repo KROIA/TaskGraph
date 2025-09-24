@@ -16,7 +16,7 @@ namespace TaskGraph
 	/// A task can have dependencies on other tasks, which must be processed before this task can be run.
 	/// Do not interact between tasks, because they can be processed in parallel.
 	/// </summary>
-	class TASK_GRAPH_EXPORT Task : public QObject
+	class TASK_GRAPH_API Task : public QObject
 	{
 		Q_OBJECT
 		public:
