@@ -167,9 +167,10 @@ namespace TaskGraph
 		return widget;
 	}
 #else
-	QWidget* LibraryInfo::createInfoWidget(QWidget* parent)
+	QWidget* LibraryInfo::createInfoWidget(QWidget* parent, bool disableHyperlink)
 	{
 		TG_UNUSED(parent);
+		TG_UNUSED(disableHyperlink);
 		return nullptr;
 	}
 #endif
