@@ -23,3 +23,4 @@
 #include "tests/TST_LoggerAutoBreadcrumbs.h"
 #include "tests/TST_AskGuiRoundTrip.h"
 #include "tests/TST_AskGuiCancel.h"
+#include "tests/TST_RerunWithoutReset.h"

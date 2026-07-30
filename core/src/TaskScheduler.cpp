@@ -128,6 +128,14 @@ namespace TaskGraph
 
     TaskScheduler::~TaskScheduler()
     {
+        // Cancel any in-progress run so workers drain promptly
+        if (m_isRunning.load(std::memory_order_acquire))
+            cancel();
+
+        // Disconnect all signals before joining — prevents emitting into
+        // already-destroyed receivers (widgets) during teardown
+        disconnect();
+
         std::shared_ptr<std::thread> async;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
@@ -390,6 +398,10 @@ namespace TaskGraph
         RunningGuard guard(m_isRunning);
 
         ensureThreadsSpawned();
+
+        // Auto-reset all tasks so a graph can be re-run without manual resetTasks()
+        for (const auto& t : m_allTasks)
+            t->reset();
 
         {
             std::vector<TaskList> layered;

@@ -9,6 +9,7 @@
 
 #ifdef QT_WIDGETS_ENABLED
 #include <QWidget>
+#include "gui/TaskGraphWidget.h"
 #endif
 
 
@@ -18,14 +19,19 @@ class TestTask : public TaskGraph::Task
 	TestTask(const std::string& name)
 		: TaskGraph::Task(name)
 	{
-		//setWorkFunction([this]() { work(); });
 	}
 	private:
-	void work() override
+	void work(TaskGraph::TaskContext& ctx) override
 	{
-		static Log::LogObject log("workLogger");
-		log.logInfo("Task " +getName() +" is running");
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		logger().logInfo("Task " + getName() + " is running");
+		// sleep long enough for the Running (yellow) state to be visible in the GUI;
+		// poll cancel in small steps so cancellation stays responsive
+		for (int i = 0; i < 20; ++i)
+		{
+			if (ctx.isCancelRequested())
+				return;
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		}
 	}
 };
 
@@ -57,7 +63,8 @@ int main(int argc, char* argv[])
 
 	Log::UI::NativeConsoleView consoleView;
 	
-	TaskGraph::TaskScheduler scheduler(0);
+	unsigned int hwThreads = std::thread::hardware_concurrency();
+	TaskGraph::TaskScheduler scheduler(hwThreads > 0 ? hwThreads : 8);
 	std::shared_ptr<TestTask> task1 = std::make_shared<TestTask>(std::string("Task1"));
 	std::shared_ptr<TestTask> task2 = std::make_shared<TestTask>(std::string("Task2"));
 	std::shared_ptr<TestTask> task3 = std::make_shared<TestTask>(std::string("Task3"));
@@ -95,15 +102,28 @@ int main(int argc, char* argv[])
 	task5->addDependency(task1);
 	task5->addDependency(task2);
 
+#ifdef QT_WIDGETS_ENABLED
+	TaskGraph::Gui::TaskGraphWidget graphWidget(&scheduler, TaskGraph::Gui::presetMonitorFactory());
+	graphWidget.resize(900, 600);
+	graphWidget.setWindowTitle("TaskGraph Monitor");
+	graphWidget.show();
+
+	scheduler.runTasksAsync();
+#else
 	std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	scheduler.runTasks();
-	//scheduler.runTasksAsync();
+#endif
 
 
 	int ret = 0;
 #ifdef QT_ENABLED
 	ret = app.exec();
 #endif
+	// Stop any in-progress async run before stack-local widgets and tasks
+	// are destroyed — prevents worker threads from emitting into dead objects
+	scheduler.cancel();
+	while (scheduler.isRunning())
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	TaskGraph::Profiler::stop((std::string(TaskGraph::LibraryInfo::name) + ".prof").c_str());
 	return ret;
 }
