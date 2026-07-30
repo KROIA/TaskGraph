@@ -57,14 +57,16 @@ namespace Gui
 
         static FeatureSet viewOnly()
         {
-            return { Feature::ShowGraph, Feature::ZoomPan, Feature::NodeSelection };
+            return { Feature::ShowGraph, Feature::ZoomPan, Feature::NodeSelection,
+                     Feature::ShowInspector };
         }
 
         static FeatureSet monitor()
         {
             return { Feature::ShowGraph, Feature::ZoomPan, Feature::NodeSelection,
                      Feature::ShowProgress, Feature::ShowThreadStats,
-                     Feature::ShowLog, Feature::RunControls, Feature::GuiRoundTrip };
+                     Feature::ShowInspector, Feature::ShowLog,
+                     Feature::RunControls, Feature::GuiRoundTrip };
         }
 
         static FeatureSet editor()

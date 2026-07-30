@@ -4,6 +4,7 @@
 #include "gui/TaskGraphScene.h"
 #include "gui/TaskGraphView.h"
 #include "gui/SchedulerControlBar.h"
+#include "gui/TaskInspectorPanel.h"
 #include "gui/TaskLogOverlay.h"
 #include "gui/TaskLogBuffer.h"
 #include "gui/AggregateTaskLogView.h"
@@ -37,6 +38,11 @@ namespace Gui
         m_scene = new TaskGraphScene(m_scheduler, this);
         m_view = m_factory->createView(m_scheduler, this);
 
+        // inspector from factory
+        auto* inspectorWidget = m_factory->createInspector(m_scheduler, this);
+        if (inspectorWidget)
+            m_inspector = qobject_cast<TaskInspectorPanel*>(inspectorWidget);
+
         AggregateTaskLogView* aggView = nullptr;
         if (m_factory->features().has(Feature::ShowLog))
         {
@@ -44,42 +50,61 @@ namespace Gui
             m_logView = aggView;
         }
 
+        // build the center area: graph view (+ optional log below) | inspector right
+        QWidget* graphArea = nullptr;
         if (m_logView && m_view)
         {
-            auto* splitter = new QSplitter(Qt::Vertical, this);
+            auto* vSplitter = new QSplitter(Qt::Vertical, this);
             m_view->setScene(m_scene);
-            splitter->addWidget(m_view);
-            splitter->addWidget(m_logView);
-            splitter->setStretchFactor(0, 3);
-            splitter->setStretchFactor(1, 1);
-            outerLayout->addWidget(splitter, 1);
+            vSplitter->addWidget(m_view);
+            vSplitter->addWidget(m_logView);
+            vSplitter->setStretchFactor(0, 3);
+            vSplitter->setStretchFactor(1, 1);
+            graphArea = vSplitter;
         }
         else if (m_view)
         {
             m_view->setScene(m_scene);
-            outerLayout->addWidget(m_view, 1);
+            graphArea = m_view;
         }
         else if (m_logView)
         {
-            outerLayout->addWidget(m_logView, 1);
+            graphArea = m_logView;
+        }
+
+        if (m_inspector && graphArea)
+        {
+            auto* hSplitter = new QSplitter(Qt::Horizontal, this);
+            hSplitter->addWidget(graphArea);
+            m_inspector->setMinimumWidth(200);
+            m_inspector->setMaximumWidth(350);
+            hSplitter->addWidget(m_inspector);
+            hSplitter->setStretchFactor(0, 4);
+            hSplitter->setStretchFactor(1, 1);
+            outerLayout->addWidget(hSplitter, 1);
+        }
+        else if (m_inspector)
+        {
+            outerLayout->addWidget(m_inspector, 1);
+        }
+        else if (graphArea)
+        {
+            outerLayout->addWidget(graphArea, 1);
         }
 
         m_logOverlay = new TaskLogOverlay(m_logBuffer,
             m_view ? static_cast<QWidget*>(m_view) : this);
         m_logOverlay->move(10, 10);
 
-        // tell view about the overlay for leader line drawing
         if (m_view)
         {
             m_view->setOverlay(m_logOverlay);
 
-            // redraw leader line when overlay moves
             connect(m_logOverlay, &TaskLogOverlay::overlayMoved,
                     this, [this]() {
                 m_view->viewport()->update();
             });
 
-            // clear leader line when overlay dismissed
             connect(m_logOverlay, &TaskLogOverlay::dismissed,
                     this, [this]() {
                 m_view->clearLeader();
@@ -112,6 +137,8 @@ namespace Gui
                 aggView->clearAll();
             if (m_view)
                 m_view->clearLeader();
+            if (m_inspector)
+                m_inspector->clearSelection();
         });
         connect(m_scheduler, &TaskScheduler::cancelled, this, [this]() {
             auto graph = m_scheduler->getTaskGraph();
@@ -147,6 +174,11 @@ namespace Gui
 
     void TaskGraphWidget::onNodeSelected(const QString& taskName)
     {
+        // update inspector
+        if (m_inspector)
+            m_inspector->inspectTask(taskName);
+
+        // update log overlay + leader line
         auto graph = m_scheduler->getTaskGraph();
         for (const auto& layer : graph)
         {

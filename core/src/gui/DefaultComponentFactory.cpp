@@ -3,6 +3,7 @@
 #if defined(QT_WIDGETS_ENABLED)
 #include "gui/TaskGraphView.h"
 #include "gui/SchedulerControlBar.h"
+#include "gui/TaskInspectorPanel.h"
 
 namespace TaskGraph
 {
@@ -32,9 +33,9 @@ namespace Gui
 
         QWidget* createInspector(TaskScheduler* scheduler, QWidget* parent) override
         {
-            TG_UNUSED(scheduler);
-            TG_UNUSED(parent);
-            return nullptr;
+            if (!m_features.has(Feature::ShowInspector))
+                return nullptr;
+            return new TaskInspectorPanel(scheduler, parent);
         }
 
         QWidget* createLogView(TaskScheduler* scheduler, QWidget* parent) override

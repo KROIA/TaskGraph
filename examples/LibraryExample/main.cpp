@@ -85,9 +85,17 @@ int main(int argc, char* argv[])
 	std::shared_ptr<TestTask> task9 = std::make_shared<TestTask>(std::string("Task9"));
 	std::shared_ptr<TestTask> task10 = std::make_shared<TestTask>(std::string("Task10"));
 
+	// give some tasks non-default config for inspector demo
+	task1->setWeight(2.0f);
+	task3->setTimeout(std::chrono::milliseconds(10000));
+	task5->setMaxRetries(3);
+	task5->setRetryBackoff(std::chrono::milliseconds(200));
+	task7->setWeight(0.5f);
+	task10->setWeight(3.0f);
+
 	scheduler.addTask(task1);
 	scheduler.addTask(task2);
-	scheduler.addTask(task3);	
+	scheduler.addTask(task3);
 	scheduler.addTask(task4);
 	scheduler.addTask(task5);
 	scheduler.addTask(task6);

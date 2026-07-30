@@ -14,6 +14,7 @@ namespace Gui
     class TaskGraphScene;
     class TaskGraphView;
     class SchedulerControlBar;
+    class TaskInspectorPanel;
     class TaskLogOverlay;
     class TaskLogBuffer;
 
@@ -37,6 +38,7 @@ namespace Gui
         TaskGraphScene* m_scene = nullptr;
         TaskGraphView* m_view = nullptr;
         SchedulerControlBar* m_controlBar = nullptr;
+        TaskInspectorPanel* m_inspector = nullptr;
         QWidget* m_logView = nullptr;
         TaskLogOverlay* m_logOverlay = nullptr;
         TaskLogBuffer* m_logBuffer = nullptr;
