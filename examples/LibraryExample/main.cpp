@@ -23,15 +23,24 @@ class TestTask : public TaskGraph::Task
 	private:
 	void work(TaskGraph::TaskContext& ctx) override
 	{
-		logger().logInfo("Task " + getName() + " is running");
-		// sleep long enough for the Running (yellow) state to be visible in the GUI;
-		// poll cancel in small steps so cancellation stays responsive
-		for (int i = 0; i < 20; ++i)
+		logger().logInfo(getName() + " started");
+		int steps = 4;
+		for (int i = 0; i < steps; ++i)
 		{
 			if (ctx.isCancelRequested())
+			{
+				logger().logWarning(getName() + " cancelled");
 				return;
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+			logger().logInfo(getName() + " step " + std::to_string(i + 1) + "/" + std::to_string(steps));
+			if (i == 1)
+				logger().logWarning(getName() + " taking longer than expected");
+			if (i == 2)
+				logger().logError(getName() + " retrying step " + std::to_string(i + 1));
+			logger().logDebug(getName() + " internal state OK");
+			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
+		logger().logInfo(getName() + " done");
 	}
 };
 
@@ -55,11 +64,11 @@ int main(int argc, char* argv[])
 #endif
 	TaskGraph::Profiler::start();
 	TaskGraph::LibraryInfo::printInfo();
-#ifdef QT_WIDGETS_ENABLED
+/*#ifdef QT_WIDGETS_ENABLED
 	QWidget* widget = TaskGraph::LibraryInfo::createInfoWidget();
 	if (widget)
 		widget->show();
-#endif
+#endif*/
 
 	Log::UI::NativeConsoleView consoleView;
 	

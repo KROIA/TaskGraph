@@ -4,8 +4,13 @@
 #include "gui/TaskGraphScene.h"
 #include "gui/TaskGraphView.h"
 #include "gui/SchedulerControlBar.h"
+#include "gui/TaskLogOverlay.h"
+#include "gui/TaskLogBuffer.h"
+#include "gui/AggregateTaskLogView.h"
 #include "TaskScheduler.h"
+#include "Task.h"
 #include <QVBoxLayout>
+#include <QSplitter>
 
 namespace TaskGraph
 {
@@ -19,24 +24,76 @@ namespace Gui
         , m_scheduler(scheduler)
         , m_factory(factory ? factory : presetMonitorFactory())
     {
-        auto* layout = new QVBoxLayout(this);
-        layout->setContentsMargins(0, 0, 0, 0);
+        auto* outerLayout = new QVBoxLayout(this);
+        outerLayout->setContentsMargins(0, 0, 0, 0);
+
+        m_logBuffer = new TaskLogBuffer(this);
+        registerTaskLoggers();
 
         m_controlBar = m_factory->createControlBar(m_scheduler, this);
         if (m_controlBar)
-            layout->addWidget(m_controlBar);
+            outerLayout->addWidget(m_controlBar);
 
         m_scene = new TaskGraphScene(m_scheduler, this);
         m_view = m_factory->createView(m_scheduler, this);
-        if (m_view)
+
+        AggregateTaskLogView* aggView = nullptr;
+        if (m_factory->features().has(Feature::ShowLog))
+        {
+            aggView = new AggregateTaskLogView(m_scheduler, m_logBuffer, this);
+            m_logView = aggView;
+        }
+
+        if (m_logView && m_view)
+        {
+            auto* splitter = new QSplitter(Qt::Vertical, this);
+            m_view->setScene(m_scene);
+            splitter->addWidget(m_view);
+            splitter->addWidget(m_logView);
+            splitter->setStretchFactor(0, 3);
+            splitter->setStretchFactor(1, 1);
+            outerLayout->addWidget(splitter, 1);
+        }
+        else if (m_view)
         {
             m_view->setScene(m_scene);
-            layout->addWidget(m_view, 1);
+            outerLayout->addWidget(m_view, 1);
+        }
+        else if (m_logView)
+        {
+            outerLayout->addWidget(m_logView, 1);
+        }
+
+        m_logOverlay = new TaskLogOverlay(m_logBuffer,
+            m_view ? static_cast<QWidget*>(m_view) : this);
+        m_logOverlay->move(10, 10);
+
+        // tell view about the overlay for leader line drawing
+        if (m_view)
+        {
+            m_view->setOverlay(m_logOverlay);
+
+            // redraw leader line when overlay moves
+            connect(m_logOverlay, &TaskLogOverlay::overlayMoved,
+                    this, [this]() {
+                m_view->viewport()->update();
+            });
+
+            // clear leader line when overlay dismissed
+            connect(m_logOverlay, &TaskLogOverlay::dismissed,
+                    this, [this]() {
+                m_view->clearLeader();
+            });
         }
 
         m_scene->rebuild();
 
-        // Wire scheduler signals -> scene updates (auto/queued connections for thread safety)
+        if (m_view)
+        {
+            connect(m_view, &TaskGraphView::nodeSelected,
+                    this, &TaskGraphWidget::onNodeSelected);
+        }
+
         connect(m_scheduler, &TaskScheduler::taskStarted, this, [this](QString name) {
             m_scene->updateNodeStatus(name, Task::Status::Running);
         });
@@ -47,11 +104,16 @@ namespace Gui
             m_scene->updateNodeStatus(name, Task::Status::Failed);
         });
 
-        connect(m_scheduler, &TaskScheduler::wasReset, this, [this]() {
+        connect(m_scheduler, &TaskScheduler::wasReset, this, [this, aggView]() {
             m_scene->rebuild();
+            m_logBuffer->clearAll();
+            m_logOverlay->dismiss();
+            if (aggView)
+                aggView->clearAll();
+            if (m_view)
+                m_view->clearLeader();
         });
         connect(m_scheduler, &TaskScheduler::cancelled, this, [this]() {
-            // refresh all node colors from actual status
             auto graph = m_scheduler->getTaskGraph();
             for (const auto& layer : graph)
                 for (const auto& task : layer)
@@ -69,7 +131,39 @@ namespace Gui
         });
         connect(m_scheduler, &TaskScheduler::started, this, [this]() {
             m_scene->rebuild();
+            registerTaskLoggers();
         });
+    }
+
+    void TaskGraphWidget::registerTaskLoggers()
+    {
+        auto graph = m_scheduler->getTaskGraph();
+        for (const auto& layer : graph)
+            for (const auto& task : layer)
+                m_logBuffer->trackLogger(
+                    task->logger().getID(),
+                    QString::fromStdString(task->getName()));
+    }
+
+    void TaskGraphWidget::onNodeSelected(const QString& taskName)
+    {
+        auto graph = m_scheduler->getTaskGraph();
+        for (const auto& layer : graph)
+        {
+            for (const auto& task : layer)
+            {
+                if (QString::fromStdString(task->getName()) == taskName)
+                {
+                    Log::LoggerID lid = task->logger().getID();
+                    m_logOverlay->showForTask(taskName, lid);
+
+                    QPointF nodeCenter = m_scene->nodeCenter(taskName);
+                    QRectF nodeRect = m_scene->nodeSceneRect(taskName);
+                    m_view->setLeaderTarget(taskName, nodeCenter, nodeRect);
+                    return;
+                }
+            }
+        }
     }
 }
 }

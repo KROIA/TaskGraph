@@ -23,6 +23,8 @@ namespace Gui
 
         void rebuild();
         void updateNodeStatus(const QString& name, Task::Status status);
+        QPointF nodeCenter(const QString& name) const;
+        QRectF nodeSceneRect(const QString& name) const;
 
     private:
         TaskScheduler* m_scheduler;

@@ -64,7 +64,7 @@ namespace Gui
         {
             return { Feature::ShowGraph, Feature::ZoomPan, Feature::NodeSelection,
                      Feature::ShowProgress, Feature::ShowThreadStats,
-                     Feature::RunControls, Feature::GuiRoundTrip };
+                     Feature::ShowLog, Feature::RunControls, Feature::GuiRoundTrip };
         }
 
         static FeatureSet editor()

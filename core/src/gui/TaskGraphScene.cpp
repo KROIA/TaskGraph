@@ -69,6 +69,26 @@ namespace Gui
                 node->setTaskStatus(status);
         }
     }
+
+    QPointF TaskGraphScene::nodeCenter(const QString& name) const
+    {
+        if (m_nodesByName.contains(name) && !m_nodesByName[name].isEmpty())
+        {
+            auto* node = m_nodesByName[name].first();
+            return node->pos() + node->boundingRect().center();
+        }
+        return QPointF();
+    }
+
+    QRectF TaskGraphScene::nodeSceneRect(const QString& name) const
+    {
+        if (m_nodesByName.contains(name) && !m_nodesByName[name].isEmpty())
+        {
+            auto* node = m_nodesByName[name].first();
+            return node->boundingRect().translated(node->pos());
+        }
+        return QRectF();
+    }
 }
 }
 

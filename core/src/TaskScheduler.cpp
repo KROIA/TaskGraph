@@ -509,12 +509,17 @@ namespace TaskGraph
             m_cvComplete.wait(lock, [this] { return m_remaining == 0; });
         }
 
-        m_progress = 100;
-        m_progressF.store(1.0f, std::memory_order_release);
-        emit progressUpdate(m_progress);
-        emit progressChangedF(1.0f);
-
         const bool wasCancelled = m_cancelRequested.load(std::memory_order_acquire);
+
+        // Force final progress to exactly 1.0 only on full success
+        if (!wasCancelled)
+        {
+            m_progress = 100;
+            m_progressF.store(1.0f, std::memory_order_release);
+            emit progressUpdate(100);
+            emit progressChangedF(1.0f);
+        }
+
         guard.disarm();
         m_isRunning.store(false, std::memory_order_release);
         if (m_logger) m_logger->logInfo(wasCancelled ? "Graph run ended (cancelled)" : "Graph run completed");
@@ -717,9 +722,14 @@ namespace TaskGraph
             emit taskFinished(name);
         }
 
+        // Clamp to exactly 1.0 when all tasks are done (not cancelled/aborted)
+        // to avoid float-precision near-miss on the final emission
         float progF = 0.0f;
         if (m_weightSum > 0.0)
             progF = static_cast<float>(m_completedWeight / m_weightSum);
+        if (m_remaining == 0 && !m_aborting
+            && !m_cancelRequested.load(std::memory_order_acquire))
+            progF = 1.0f;
         if (progF > 1.0f) progF = 1.0f;
         if (progF < 0.0f) progF = 0.0f;
         m_progressF.store(progF, std::memory_order_release);

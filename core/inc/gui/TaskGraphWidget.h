@@ -14,6 +14,8 @@ namespace Gui
     class TaskGraphScene;
     class TaskGraphView;
     class SchedulerControlBar;
+    class TaskLogOverlay;
+    class TaskLogBuffer;
 
     class TASK_GRAPH_API TaskGraphWidget : public QWidget
     {
@@ -24,12 +26,20 @@ namespace Gui
             std::shared_ptr<ITaskGraphComponentFactory> factory = nullptr,
             QWidget* parent = nullptr);
 
+    private slots:
+        void onNodeSelected(const QString& taskName);
+
     private:
+        void registerTaskLoggers();
+
         TaskScheduler* m_scheduler;
         std::shared_ptr<ITaskGraphComponentFactory> m_factory;
         TaskGraphScene* m_scene = nullptr;
         TaskGraphView* m_view = nullptr;
         SchedulerControlBar* m_controlBar = nullptr;
+        QWidget* m_logView = nullptr;
+        TaskLogOverlay* m_logOverlay = nullptr;
+        TaskLogBuffer* m_logBuffer = nullptr;
     };
 }
 }
