@@ -35,6 +35,8 @@
 
 
 # Paths
+.claude
+CLAUDE.md
 bin
 build
 UnitTests/bin

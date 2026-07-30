@@ -2,140 +2,214 @@
 
 #include "TaskGraph_base.h"
 #include <QObject>
+#include <QString>
 #include <string>
 #include <functional>
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <mutex>
+#include <any>
+#include <chrono>
+#include <typeinfo>
+#include <stdexcept>
 
 namespace TaskGraph
 {
-	/// <summary>
-	/// A task is a workblock wich can be run by the TaskScheduler.
-	/// Each task shuld be processable by a single thread.
-	/// A task can have dependencies on other tasks, which must be processed before this task can be run.
-	/// Do not interact between tasks, because they can be processed in parallel.
-	/// </summary>
-	class TASK_GRAPH_API Task : public QObject
-	{
-		Q_OBJECT
-		public:
+    class TaskScheduler;
+    class Task;
+    class TaskGroup;
 
-		Task();
-		Task(const std::string &name);
-		Task(const Task& other);
-		virtual ~Task();
+    /// <summary>
+    /// Execution context handed to a task body. Provides result set/get, cancel
+    /// polling, dependency-result access and dynamic child spawning. Only the
+    /// currently running task should use its own context; do not store or share.
+    /// </summary>
+    class TASK_GRAPH_API TaskContext
+    {
+        public:
+        TaskContext(Task* task, TaskScheduler* scheduler)
+            : m_task(task), m_scheduler(scheduler) {}
 
-		/// <summary>
-		/// Returns the name of the task
-		/// </summary>
-		/// <returns>name of the task</returns>
-		const std::string& getName() const { return m_name; }
+        void setResult(std::any value);
+        bool isCancelRequested() const;
 
-		/// <summary>
-		/// Sets a name for this task
-		/// </summary>
-		/// <param name="name"></param>
-		void setName(const std::string& name) { m_name = name; }
+        /// <summary>
+        /// Read a completed dependency's result. Throws std::bad_any_cast on type mismatch,
+        /// throws std::runtime_error if the dependency has no result set.
+        /// </summary>
+        template <class T>
+        T getDependencyResult(const Task& dep) const;
 
-		/// <summary>
-		/// Set a custom work function which will be called when the task is run
-		/// The custom work function will be called instead of the "work" function
-		/// If no custom work function is set, the "work" function will be called
-		/// </summary>
-		/// <param name="workFunction"></param>
-		void setWorkFunction(const std::function<void()>& workFunction) { m_workFunction = workFunction; }
+        /// <summary>
+        /// Insert a new task into the running scheduler with the caller task as an
+        /// implicit predecessor (child runs after the caller finishes). Any explicit
+        /// dependencies on the child must be configured before this call. Returns
+        /// false if the scheduler is not running or registration failed.
+        /// </summary>
+        bool spawn(const std::shared_ptr<Task>& child);
 
-		/// <summary>
-		/// Add a task on which this task depends on
-		/// This task can only be run if all dependencies are processed
-		/// </summary>
-		/// <param name="task"></param>
-		/// <returns>
-		///		true, if the task was added to the dependency list
-		///		false, if the task can't be added to the dependency list.
-		///			   Reason: task is already running.	
-		/// </returns>
-		bool addDependency(const std::shared_ptr<Task>& task);
+        Task* task() const { return m_task; }
 
-		/// <summary>
-		/// Clears the list of dependencies
-		/// </summary>
-		/// <returns>
-		///		true, if the list of dependencies was cleared. 
-		///		false, if the task is currently running.    
-		/// </returns>
-		bool clearDependencies();
+        private:
+        Task* m_task;
+        TaskScheduler* m_scheduler;
+    };
 
-		/// <summary>
-		/// Gets a list of task on which this task depends
-		/// This task can only be run if all dependencies are processed
-		/// </summary>
-		/// <returns>vector of tasks</returns>
-		const std::vector<std::shared_ptr<Task>>& getDependencies() const { return m_dependencies; }
+    /// <summary>
+    /// A task is a workblock which can be run by the TaskScheduler.
+    /// Each task should be processable by a single thread.
+    /// A task can have dependencies on other tasks, which must be processed before this task can be run.
+    /// Do not interact between tasks, because they can be processed in parallel.
+    /// </summary>
+    class TASK_GRAPH_API Task : public QObject
+    {
+        Q_OBJECT
+        public:
 
-		/// <summary>
-		/// Checks if a custom work function is set, if a custom work function is set, 
-		/// it will be called, otherwise the "work" function will be called.
-		/// </summary>
-		/// <returns>true, if the task was processed, false if the task can't be run</returns>
-		bool runTask();
+        enum class Status : int
+        {
+            Pending = 0,
+            Ready,
+            Running,
+            Done,
+            Failed,
+            Cancelled,
+            Skipped
+        };
 
-		/// <summary>
-		/// Flag that indicates if the task is running
-		/// </summary>
-		/// <returns>true, if the task is running</returns>
-		bool isRunning() const { return m_isRunning; }
+        enum class TaskAffinity : int
+        {
+            Any = 0,
+            Gui
+        };
 
-		/// <summary>
-		/// Flag that indicates if the task is done
-		/// </summary>
-		/// <returns>true, if the task is done</returns>
-		bool isDone() const { return m_done; }
+        Task();
+        Task(const std::string &name);
+        Task(const Task& other) = delete;
+        Task& operator=(const Task& other) = delete;
+        virtual ~Task();
 
-		/// <summary>
-		/// Resets the "done" flag of the task and emits the "resetted" signal
-		/// </summary>
-		void reset();
+        const std::string& getName() const { return m_name; }
+        void setName(const std::string& name) { m_name = name; }
 
-		/// <summary>
-		///		Check if all dependencies are processed
-		/// </summary>
-		/// <returns>true, if all dependencies are processed, otherwise false</returns>
-		bool checkDependencies();
+        void setWorkFunction(const std::function<void()>& workFunction) { m_workFunction = workFunction; }
+        void setWorkFunction(const std::function<void(TaskContext&)>& workFunction) { m_workFunctionCtx = workFunction; }
 
-		signals:
-		// Signals can be emitted from different threads
+        void setAffinity(TaskAffinity a) { m_affinity.store(a, std::memory_order_release); }
+        TaskAffinity getAffinity() const { return m_affinity.load(std::memory_order_acquire); }
 
-		/// <summary>
-		/// Gets emitted when the task gets executed
-		/// </summary>
-		void started();
+        /// <summary>Per-task progress weight; must be positive. Default 1.0.</summary>
+        void setWeight(float w);
+        float getWeight() const { return m_weight.load(std::memory_order_acquire); }
 
-		/// <summary>
-		/// Gets emitted when the task has completed execution
-		/// </summary>
-		void compleeted();
+        /// <summary>Wall-clock timeout for the task body. Zero (default) disables the watchdog.</summary>
+        void setTimeout(std::chrono::milliseconds t) { m_timeoutMs.store(t.count(), std::memory_order_release); }
+        std::chrono::milliseconds getTimeout() const { return std::chrono::milliseconds(m_timeoutMs.load(std::memory_order_acquire)); }
 
-		/// <summary>
-		/// Gets emitted when the task has been resetted
-		/// </summary>
-		void resetted();
+        void setMaxRetries(int n) { m_maxRetries.store(n < 0 ? 0 : n, std::memory_order_release); }
+        int getMaxRetries() const { return m_maxRetries.load(std::memory_order_acquire); }
 
-		protected:
+        void setRetryBackoff(std::chrono::milliseconds t) { m_backoffMs.store(t.count(), std::memory_order_release); }
+        std::chrono::milliseconds getRetryBackoff() const { return std::chrono::milliseconds(m_backoffMs.load(std::memory_order_acquire)); }
 
-		/// <summary>
-		///		Work function that is called when the task is run 
-		///		Override this function with the custom work payload of the task
-		/// </summary>
-		virtual void work();
-	
-		private:
-		std::string m_name;
-		std::atomic<bool> m_isRunning;
-		std::atomic<bool> m_done;
+        bool addDependency(const std::shared_ptr<Task>& task);
+        /// <summary>Depend on every member of the group. Returns true only if all members were added successfully.</summary>
+        bool addDependency(const TaskGroup& group);
+        bool clearDependencies();
+        std::vector<std::shared_ptr<Task>> getDependencies() const;
 
-		std::function<void()> m_workFunction;
-		std::vector<std::shared_ptr<Task>> m_dependencies;
-	};
+        bool runTask();
+        bool runTask(TaskContext* ctx);
+
+        Status getStatus() const { return m_status.load(std::memory_order_acquire); }
+        bool isRunning() const { return getStatus() == Status::Running; }
+        bool isDone() const { return getStatus() == Status::Done; }
+        bool isTerminal() const
+        {
+            Status s = getStatus();
+            return s == Status::Done || s == Status::Failed
+                || s == Status::Cancelled || s == Status::Skipped;
+        }
+
+        void cancel();
+        bool isCancelRequested() const { return m_cancelRequested.load(std::memory_order_acquire); }
+
+        void skip();
+        void reset();
+
+        bool checkDependencies();
+        QString getLastError() const;
+
+        /// <summary>
+        /// Read-only access to the task's result (empty std::any if never set).
+        /// Safe to call once the task has reached a terminal state.
+        /// </summary>
+        std::any getResult() const;
+
+        /// <summary>
+        /// Store a result. Only valid to call while the task is Running (from within its body).
+        /// </summary>
+        void setResult(std::any value);
+
+        // Internal — used by TaskScheduler for retry/timeout bookkeeping. Not part of the public contract.
+        void signalTimeout();
+        void prepareRetry();
+        uint64_t beginTimeoutWindow() { return m_timeoutGen.fetch_add(1, std::memory_order_acq_rel) + 1; }
+        uint64_t currentTimeoutWindow() const { return m_timeoutGen.load(std::memory_order_acquire); }
+
+        signals:
+        void started();
+        void completed();
+        void failed(QString error);
+        void wasReset();
+
+        protected:
+        virtual void work();
+        virtual void work(TaskContext& ctx);
+
+        private:
+        bool wouldCreateCycle(const std::shared_ptr<Task>& candidate) const;
+        void setLastError(const QString& err);
+
+        std::string m_name;
+        std::atomic<Status> m_status;
+        std::atomic<TaskAffinity> m_affinity;
+        std::atomic<bool> m_cancelRequested;
+        std::atomic<bool> m_timeoutHit;
+        std::atomic<uint64_t> m_timeoutGen;
+
+        std::atomic<float> m_weight;
+        std::atomic<int64_t> m_timeoutMs;
+        std::atomic<int> m_maxRetries;
+        std::atomic<int64_t> m_backoffMs;
+
+        std::function<void()> m_workFunction;
+        std::function<void(TaskContext&)> m_workFunctionCtx;
+        std::vector<std::weak_ptr<Task>> m_dependencies;
+        mutable std::mutex m_depMutex;
+
+        mutable std::mutex m_errorMutex;
+        QString m_lastError;
+        std::any m_result;
+    };
+
+    /// <summary>
+    /// Read a completed task's result as T. Throws std::bad_any_cast on mismatch.
+    /// </summary>
+    template <class T>
+    T getResultAs(const Task& task)
+    {
+        std::any r = task.getResult();
+        return std::any_cast<T>(r);
+    }
+
+    template <class T>
+    T TaskContext::getDependencyResult(const Task& dep) const
+    {
+        std::any r = dep.getResult();
+        if (!r.has_value())
+            throw std::runtime_error("Dependency has no result");
+        return std::any_cast<T>(r);
+    }
 }

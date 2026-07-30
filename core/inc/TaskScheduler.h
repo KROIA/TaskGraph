@@ -3,211 +3,173 @@
 #include "TaskGraph_base.h"
 #include "Task.h"
 #include <QObject>
+#include <QString>
 #include <vector>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <deque>
+#include <atomic>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace TaskGraph
 {
-	using TaskList = std::vector<std::shared_ptr<Task>>;
-	using TaskDeque = std::deque<std::shared_ptr<Task>>;
+    using TaskList = std::vector<std::shared_ptr<Task>>;
+    using TaskDeque = std::deque<std::shared_ptr<Task>>;
 
-	/// <summary>
-	/// The TaskScheduler contains a list of tasks.
-	/// The TaskScheduler will run the tasks in the correct order.
-	/// Independent Tasks will be run in parallel.
-	/// </summary>
-	class TASK_GRAPH_API TaskScheduler : public QObject
-	{
-		Q_OBJECT
-		public:
-		enum Error
-		{
-			noError,				/// < No error
-			noTasks,				/// < No tasks to run	
-			taskAlreadyAdded,		/// < The Task is already added to the TaskScheduler
-			missingDependency,		/// < The TaskScheduler does not contain a dependent Task. 
-			                        ///   Make sure that all dependencies are added to the TaskScheduler
-			dependencyGraphNotDAG,  /// < The dependency graph contains a cycle. 
-			                        ///   A cycle in the dependency graph is not allowed.
-									///   DAG: Directed Acyclic Graph
-			alreadyRunning,			/// < The TaskScheduler is already running
-			busy,				    /// < Action can't be performed because the TaskScheduler is busy
-									
-			__count					/// < Number of error codes
-		};
+    /// <summary>
+    /// Lightweight collection of tasks treated as a single dependency unit.
+    /// Depending on a group is syntactic sugar for depending on every member.
+    /// </summary>
+    class TASK_GRAPH_API TaskGroup
+    {
+        public:
+        TaskGroup() = default;
+        explicit TaskGroup(const std::string& name) : m_name(name) {}
 
-		/// <summary>
-		/// Creates a TaskScheduler with a number of threads.
-		/// If the threadCount is 0, the TaskScheduler will not use threads.
-		/// </summary>
-		/// <param name="threadCount"></param>
-		TaskScheduler(size_t threadCount = std::thread::hardware_concurrency());
-		~TaskScheduler();
+        void addTask(const std::shared_ptr<Task>& t)
+        {
+            if (t) m_members.push_back(t);
+        }
+        const std::vector<std::shared_ptr<Task>>& members() const { return m_members; }
+        size_t size() const { return m_members.size(); }
+        const std::string& getName() const { return m_name; }
 
-		/// <summary>
-		/// Enables the TaskScheduler to use threads.
-		/// If the threadCount is 0, the TaskScheduler will not use threads.
-		/// </summary>
-		/// <param name="threadCount"></param>
-		/// <returns>
-		///		true, if the desired threadcount was applyed.
-		///		false, if the TaskScheduler is still running.
-		/// </returns>
-		bool enableThreads(size_t threadCount);
+        private:
+        std::string m_name;
+        std::vector<std::shared_ptr<Task>> m_members;
+    };
 
-		/// <summary>
-		/// Disables the TaskScheduler to use threads.
-		/// </summary>
-		/// <returns>
-		/// 	true, if the threads were disabled.
-		///		false, if the TaskScheduler is still running.
-		/// </returns>
-		bool disableThreads();
+    /// <summary>
+    /// The TaskScheduler contains a list of tasks and runs them in dependency order.
+    /// Independent tasks run in parallel via a ready-queue model: a task becomes
+    /// eligible for execution as soon as its dependencies complete, without waiting
+    /// for unrelated siblings.
+    /// </summary>
+    class TASK_GRAPH_API TaskScheduler : public QObject
+    {
+        Q_OBJECT
+        public:
+        enum Error
+        {
+            noError,
+            noTasks,
+            taskAlreadyAdded,
+            missingDependency,
+            dependencyGraphNotDAG,
+            alreadyRunning,
+            busy,
+            __count
+        };
 
-		/// <summary>
-		/// Adds a Task to the TaskScheduler.
-		/// </summary>
-		/// <param name="task"></param>
-		/// <returns>
-		///		true, if the task was added.
-		/// 	false, if the taks can't be added because it is already added.
-		/// </returns>
-		bool addTask(const std::shared_ptr<Task>& task);
+        enum class FailurePolicy : int
+        {
+            FailFast = 0,
+            ContinueOthers
+        };
 
-		/// <summary>
-		/// Starts the scheduling of the tasks.
-		/// This function will block until all tasks are completed.
-		/// </summary>
-		void runTasks();
+        TaskScheduler(size_t threadCount = std::thread::hardware_concurrency());
+        ~TaskScheduler();
 
-		/// <summary>
-		/// Starts the scheduling of the tasks.
-		/// This function is non-blocking.
-		/// </summary>
-		void runTasksAsync();
+        bool enableThreads(size_t threadCount);
+        bool disableThreads();
 
-		/// <summary>
-		/// Reset is needed to run the tasks again.
-		/// </summary>
-		void resetTasks();
+        bool addTask(const std::shared_ptr<Task>& task);
 
-		/// <summary>
-		/// Removes all tasks from the TaskScheduler.
-		/// </summary>
-		void clear();
+        void runTasks();
+        void runTasksAsync();
 
-		/// <summary>
-		/// Gets the percentage of the progress.
-		/// </summary>
-		/// <returns>Progress in a range from 0 to 100</returns>
-		int getProgress() const { return m_progress; }
+        void resetTasks();
+        void clear();
 
-		/// <summary>
-		/// Gets the busy state of the TaskScheduler.
-		/// </summary>
-		/// <returns>true, if the TaskScheduler is busy, otherwise false</returns>
-		bool isRunning() const { return m_isRunning; }
+        void cancel();
 
-		/// <summary>
-		/// Gets the number of threads used to run the tasks.
-		/// If the TaskScheduler is not using threads, the return value is 0.
-		/// </summary>
-		/// <returns>number of threads used to run the tasks</returns>
-		unsigned int getThreadCount() const { return m_threads.size(); }
+        void pause();
+        void resume();
+        bool isPaused() const { return m_paused.load(std::memory_order_acquire); }
 
-		/// <summary>
-		/// Gets the amount of threads that are currently busy.
-		/// </summary>
-		/// <returns>amount of busy threads</returns>
-		unsigned int getBusyThreadCount() const { return m_busyThreads; }
+        void setFailurePolicy(FailurePolicy p) { m_failurePolicy.store(p, std::memory_order_release); }
+        FailurePolicy getFailurePolicy() const { return m_failurePolicy.load(std::memory_order_acquire); }
 
-		/// <summary>
-		/// Gets the last error that occured.
-		/// Methods which can fail will set the last error.
-		/// </summary>
-		/// <returns></returns>
-		Error getLastError() const { return m_lastError; }
+        int getProgress() const { return m_progress; }
+        float getProgressF() const { return m_progressF.load(std::memory_order_acquire); }
+        bool isRunning() const { return m_isRunning.load(std::memory_order_acquire); }
+        unsigned int getThreadCount() const { return static_cast<unsigned int>(m_threads.size()); }
+        unsigned int getBusyThreadCount() const;
+        size_t getTotalTasks() const;
 
-		/// <summary>
-		/// Gets a 2D list of tasks.
-		/// The first index represents layers of tasks.
-		/// Each layer can be executed in parallel.
-		/// </summary>
-		/// <returns></returns>
-		std::vector<TaskList> getTaskGraph() const;
+        Error getLastError() const { return m_lastError.load(std::memory_order_acquire); }
 
+        std::vector<TaskList> getTaskGraph() const;
 
-		signals:
-		// Signals can be emitted from different threads
-		
-		/// <summary>
-		/// Gets emitted when the TaskScheduler starts to run the tasks.
-		/// </summary>
-		void started();
+        /// <summary>
+        /// Dynamic edge insertion from within a running task body. `parent` must be the
+        /// currently running caller task, already tracked. `child`'s explicit dependencies
+        /// must already have been configured on `child` prior to this call. Returns false
+        /// on any validation failure.
+        /// </summary>
+        bool addDynamicTask(const std::shared_ptr<Task>& child, Task* parent);
 
-		/// <summary>
-		/// Gets emitted when the TaskScheduler has completed all tasks.
-		/// </summary>
-		void compleeted();
+        signals:
+        void started();
+        void completed();
+        void wasReset();
+        void cancelled();
+        void paused();
+        void resumed();
+        void progressUpdate(int progress);
+        void progressChangedF(float progress);
 
-		/// <summary>
-		/// Gets emitted when the TaskScheduler has resetted all tasks.
-		/// </summary>
-		void resetted();
+        void statusMessage(QString msg);
+        void taskStarted(QString taskName);
+        void taskFinished(QString taskName);
+        void taskFailed(QString taskName, QString error);
+        void errorRaised(QString error);
 
-		/// <summary>
-		/// Gets emitted when the TaskScheduler has updated the progress.
-		/// </summary>
-		/// <param name="progress"></param>
-		void progressUpdate(int progress); // progress in percentage
+        private:
+        Error buildTaskGraph(std::vector<TaskList> &taskGraph) const;
 
-		
+        void ensureThreadsSpawned();
+        void onTaskCompleted(const std::shared_ptr<Task>& task);
+        void skipDescendantsLocked(Task* root);
+        void cancelPendingLocked();
 
-		private:
+        // Arms a detached watchdog for `task` if a positive timeout is configured.
+        void armWatchdog(const std::shared_ptr<Task>& task);
 
-		/// <summary>
-		/// Sorts the tasks in the correct execution order.
-		/// The result is stored in taskGraph.
-		/// </summary>
-		/// <param name="taskGraph"></param>
-		/// <returns></returns>
-		Error buildTaskGraph(std::vector<TaskList> &taskGraph) const;
+        TaskList m_allTasks;
+        mutable std::vector<TaskList> m_taskGraph;
 
-		/// <summary>
-		/// Stores all tasks in a random order
-		/// </summary>
-		TaskList m_allTasks;
+        std::vector<std::shared_ptr<std::thread>> m_threads;
+        std::vector<std::shared_ptr<std::atomic<bool>>> m_threadExit;
+        mutable std::mutex m_mutex;
+        std::condition_variable m_cvTask;
+        std::condition_variable m_cvComplete;
+        bool m_stopThreads;
+        unsigned int m_busyThreads;
+        std::atomic<bool> m_isRunning;
+        std::atomic<bool> m_paused;
+        std::atomic<bool> m_cancelRequested;
+        bool m_aborting;
+        size_t m_desiredThreadCount;
+        std::atomic<int> m_progress;
+        std::atomic<float> m_progressF;
 
-		
-		/// <summary>
-		/// After calling buildTaskGraph, the tasks are sorted in the correct execution order.
-		/// taskGraph contains a list of multiple tasks. 
-		/// Each list can be executed in parallel and are independent of each other.
-		/// The first list must be executet first.
-		/// </summary>
-		std::vector<TaskList> m_taskGraph;
+        TaskDeque m_readyQueue;
+        std::unordered_map<Task*, int> m_inDegree;
+        std::unordered_map<Task*, std::vector<Task*>> m_dependents;
+        std::unordered_map<Task*, std::shared_ptr<Task>> m_aliveByPtr;
+        size_t m_totalTasks;
+        size_t m_remaining;
 
-		/// <summary>
-		/// Threadpool to run the tasks
-		/// </summary>
-		std::vector<std::shared_ptr<std::thread>> m_threads;
-		std::mutex m_mutex;
-		std::condition_variable m_cvTask;
-		std::condition_variable m_cvComplete;
-		bool m_stopThreads;
-		unsigned int m_busyThreads;
-		std::atomic<bool> m_isRunning;
-		int m_deltaProgress; 
-		std::atomic<int> m_progress;
+        double m_weightSum;
+        double m_completedWeight;
 
-		TaskDeque m_tasksToProcess;
-		std::shared_ptr<std::thread> m_asyncThread = nullptr;
-		mutable Error m_lastError = Error::noError;
+        std::shared_ptr<std::thread> m_asyncThread = nullptr;
+        mutable std::atomic<Error> m_lastError;
+        std::atomic<FailurePolicy> m_failurePolicy;
 
-		static void taskThreadFunction(TaskScheduler *obj, int threadIndex);
-
-	};
+        static void taskThreadFunction(TaskScheduler *obj, int threadIndex, std::shared_ptr<std::atomic<bool>> localExit);
+    };
 }
