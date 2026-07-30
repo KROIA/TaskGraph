@@ -6,6 +6,7 @@
 #include <QGraphicsScene>
 #include <QHash>
 #include <QString>
+#include <QList>
 
 namespace TaskGraph
 {
@@ -14,6 +15,7 @@ namespace TaskGraph
 namespace Gui
 {
     class TaskNodeItem;
+    class TaskEdgeItem;
 
     class TASK_GRAPH_API TaskGraphScene : public QGraphicsScene
     {
@@ -26,9 +28,13 @@ namespace Gui
         QPointF nodeCenter(const QString& name) const;
         QRectF nodeSceneRect(const QString& name) const;
 
+        void highlightEdgesForNode(const QString& taskName);
+        void clearEdgeHighlights();
+
     private:
         TaskScheduler* m_scheduler;
         QHash<QString, QList<TaskNodeItem*>> m_nodesByName;
+        QList<TaskEdgeItem*> m_edges;
     };
 }
 }

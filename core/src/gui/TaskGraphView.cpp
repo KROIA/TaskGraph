@@ -136,6 +136,27 @@ namespace Gui
             if (node)
                 emit nodeSelected(node->taskName());
         }
+        else
+        {
+            emit nodeSelected(QString());
+        }
+    }
+
+    void TaskGraphView::mouseDoubleClickEvent(QMouseEvent* event)
+    {
+        QGraphicsView::mouseDoubleClickEvent(event);
+
+        // Double-click also selects, so emit both signals
+        auto items = scene()->selectedItems();
+        if (!items.isEmpty())
+        {
+            auto* node = dynamic_cast<TaskNodeItem*>(items.first());
+            if (node)
+            {
+                emit nodeSelected(node->taskName());
+                emit nodeDoubleClicked(node->taskName());
+            }
+        }
     }
 
     void TaskGraphView::mouseMoveEvent(QMouseEvent* event)

@@ -31,6 +31,7 @@ namespace Gui
 
     private slots:
         void onNodeSelected(const QString& taskName);
+        void onNodeDoubleClicked(const QString& taskName);
         void onGraphStructureChanged();
 
     private:

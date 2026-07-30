@@ -122,6 +122,8 @@ namespace Gui
         {
             connect(m_view, &TaskGraphView::nodeSelected,
                     this, &TaskGraphWidget::onNodeSelected);
+            connect(m_view, &TaskGraphView::nodeDoubleClicked,
+                    this, &TaskGraphWidget::onNodeDoubleClicked);
         }
 
         if (m_view && m_logOverlay)
@@ -212,9 +214,25 @@ namespace Gui
 
     void TaskGraphWidget::onNodeSelected(const QString& taskName)
     {
+        if (taskName.isEmpty())
+        {
+            if (m_inspector)
+                m_inspector->clearSelection();
+            if (m_scene)
+                m_scene->clearEdgeHighlights();
+            return;
+        }
+
         if (m_inspector)
             m_inspector->inspectTask(taskName);
 
+        // Highlight connected edges
+        if (m_scene)
+            m_scene->highlightEdgesForNode(taskName);
+    }
+
+    void TaskGraphWidget::onNodeDoubleClicked(const QString& taskName)
+    {
         Log::LoggerID lid = m_logBuffer->loggerIdForTask(taskName);
         if (lid == 0 || !m_logOverlay || !m_view)
             return;

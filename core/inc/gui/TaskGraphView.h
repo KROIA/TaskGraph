@@ -24,10 +24,12 @@ namespace Gui
 
     signals:
         void nodeSelected(QString name);
+        void nodeDoubleClicked(QString name);
 
     protected:
         void wheelEvent(QWheelEvent* event) override;
         void mousePressEvent(QMouseEvent* event) override;
+        void mouseDoubleClickEvent(QMouseEvent* event) override;
         void mouseMoveEvent(QMouseEvent* event) override;
         void mouseReleaseEvent(QMouseEvent* event) override;
         void drawForeground(QPainter* painter, const QRectF& rect) override;
