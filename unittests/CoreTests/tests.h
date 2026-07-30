@@ -19,3 +19,7 @@
 #include "tests/TST_ThreadPoolResize.h"
 #include "tests/TST_TaskGroup.h"
 #include "tests/TST_PauseResume.h"
+#include "tests/TST_LoggerPerTask.h"
+#include "tests/TST_LoggerAutoBreadcrumbs.h"
+#include "tests/TST_AskGuiRoundTrip.h"
+#include "tests/TST_AskGuiCancel.h"

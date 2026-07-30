@@ -3,6 +3,7 @@
 #include "TaskGraph_base.h"
 #include <QObject>
 #include <QString>
+#include <QVariant>
 #include <string>
 #include <functional>
 #include <vector>
@@ -13,6 +14,8 @@
 #include <chrono>
 #include <typeinfo>
 #include <stdexcept>
+
+namespace Log { class LogObject; }
 
 namespace TaskGraph
 {
@@ -48,6 +51,26 @@ namespace TaskGraph
         /// false if the scheduler is not running or registration failed.
         /// </summary>
         bool spawn(const std::shared_ptr<Task>& child);
+
+        /// <summary>Access the running task's per-instance logger.</summary>
+        Log::LogObject& log();
+
+        /// <summary>
+        /// Block the calling worker until the GUI thread responds via
+        /// TaskScheduler::respondToGuiEvent. On cancellation the wait returns an
+        /// invalid QVariant. MUST NOT be called from the GUI thread or from a
+        /// Task with TaskAffinity::Gui — either would deadlock. This primitive
+        /// is the first scheduler-provided blocking point that is
+        /// cancellation-aware; other blocking work in a task body must poll
+        /// isCancelRequested() cooperatively.
+        /// </summary>
+        QVariant askGui(const QVariant& payload);
+
+        template <class T>
+        T askGuiAs(const QVariant& payload)
+        {
+            return askGui(payload).value<T>();
+        }
 
         Task* task() const { return m_task; }
 
@@ -91,7 +114,10 @@ namespace TaskGraph
         virtual ~Task();
 
         const std::string& getName() const { return m_name; }
-        void setName(const std::string& name) { m_name = name; }
+        void setName(const std::string& name);
+
+        Log::LogObject& logger();
+        const Log::LogObject& logger() const;
 
         void setWorkFunction(const std::function<void()>& workFunction) { m_workFunction = workFunction; }
         void setWorkFunction(const std::function<void(TaskContext&)>& workFunction) { m_workFunctionCtx = workFunction; }
@@ -183,6 +209,8 @@ namespace TaskGraph
         std::atomic<int64_t> m_timeoutMs;
         std::atomic<int> m_maxRetries;
         std::atomic<int64_t> m_backoffMs;
+
+        std::unique_ptr<Log::LogObject> m_logger;
 
         std::function<void()> m_workFunction;
         std::function<void(TaskContext&)> m_workFunctionCtx;

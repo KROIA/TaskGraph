@@ -4,6 +4,7 @@
 #include "Task.h"
 #include <QObject>
 #include <QString>
+#include <QVariant>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -12,6 +13,8 @@
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+
+namespace Log { class LogObject; }
 
 namespace TaskGraph
 {
@@ -111,7 +114,25 @@ namespace TaskGraph
         /// </summary>
         bool addDynamicTask(const std::shared_ptr<Task>& child, Task* parent);
 
+        Log::LogObject& logger();
+
+        /// <summary>
+        /// Blocking round-trip called from a worker task via TaskContext::askGui.
+        /// Emits guiEventRequested and waits until respondToGuiEvent is called
+        /// with the matching requestId or the task/graph is cancelled.
+        /// Cancellation returns an invalid QVariant.
+        /// </summary>
+        QVariant waitForGuiResponse(int requestId, Task* task, const QVariant& payload);
+
+        public slots:
+        void respondToGuiEvent(int requestId, const QVariant& response);
+
+        public:
+        int allocateGuiRequestId();
+
         signals:
+        void guiEventRequested(int requestId, QString taskName, QVariant payload);
+
         void started();
         void completed();
         void wasReset();
@@ -131,6 +152,7 @@ namespace TaskGraph
         Error buildTaskGraph(std::vector<TaskList> &taskGraph) const;
 
         void ensureThreadsSpawned();
+        void runTasksBody();
         void onTaskCompleted(const std::shared_ptr<Task>& task);
         void skipDescendantsLocked(Task* root);
         void cancelPendingLocked();
@@ -171,5 +193,21 @@ namespace TaskGraph
         std::atomic<FailurePolicy> m_failurePolicy;
 
         static void taskThreadFunction(TaskScheduler *obj, int threadIndex, std::shared_ptr<std::atomic<bool>> localExit);
+
+        struct PendingGuiRequest
+        {
+            std::mutex m;
+            std::condition_variable cv;
+            QVariant response;
+            bool ready = false;
+            bool cancelled = false;
+        };
+
+        std::unique_ptr<Log::LogObject> m_logger;
+        std::unordered_map<int, std::shared_ptr<PendingGuiRequest>> m_pendingGuiRequests;
+        std::mutex m_pendingGuiMutex;
+        std::atomic<int> m_nextGuiRequestId{1};
+
+        void cancelAllPendingGuiRequests();
     };
 }

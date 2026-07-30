@@ -2,6 +2,7 @@
 #include "TaskScheduler.h"
 #include "TaskGraphLogger.h"
 #include "CrashReport.h"
+#include "LogObject.h"
 #include <unordered_set>
 #include <exception>
 
@@ -19,6 +20,7 @@ namespace TaskGraph
         , m_timeoutMs(0)
         , m_maxRetries(0)
         , m_backoffMs(0)
+        , m_logger(std::make_unique<Log::LogObject>(std::string("Task")))
         , m_workFunction(nullptr)
         , m_workFunctionCtx(nullptr)
     {
@@ -36,6 +38,7 @@ namespace TaskGraph
         , m_timeoutMs(0)
         , m_maxRetries(0)
         , m_backoffMs(0)
+        , m_logger(std::make_unique<Log::LogObject>(name))
         , m_workFunction(nullptr)
         , m_workFunctionCtx(nullptr)
     {
@@ -44,6 +47,16 @@ namespace TaskGraph
     Task::~Task()
     {
     }
+
+    void Task::setName(const std::string& name)
+    {
+        m_name = name;
+        if (m_logger)
+            m_logger->setName(name);
+    }
+
+    Log::LogObject& Task::logger() { return *m_logger; }
+    const Log::LogObject& Task::logger() const { return *m_logger; }
 
     void Task::setWeight(float w)
     {
@@ -114,7 +127,7 @@ namespace TaskGraph
             return false;
         }
 
-        Internal::TaskGraphLogger::logInfo("Task " + m_name + " started");
+        if (m_logger) m_logger->logInfo("Task started");
         emit started();
         try
         {
@@ -130,7 +143,7 @@ namespace TaskGraph
         catch (const std::exception& e)
         {
             const QString msg = QString::fromUtf8(e.what());
-            Internal::TaskGraphLogger::logError("Task \"" + m_name + "\" threw: " + e.what());
+            if (m_logger) m_logger->logError(std::string("Task threw: ") + e.what());
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
             emit failed(msg);
@@ -139,7 +152,7 @@ namespace TaskGraph
         catch (...)
         {
             const QString msg = QStringLiteral("Unknown exception");
-            Internal::TaskGraphLogger::logError("Task \"" + m_name + "\" threw an unknown exception");
+            if (m_logger) m_logger->logError("Task threw an unknown exception");
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
             emit failed(msg);
@@ -152,7 +165,7 @@ namespace TaskGraph
             const QString msg = QStringLiteral("timeout");
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
-            Internal::TaskGraphLogger::logError("Task \"" + m_name + "\" timed out");
+            if (m_logger) m_logger->logError("Task timed out");
             emit failed(msg);
             return false;
         }
@@ -160,11 +173,11 @@ namespace TaskGraph
         if (m_cancelRequested.load(std::memory_order_acquire))
         {
             m_status.store(Status::Cancelled, std::memory_order_release);
-            Internal::TaskGraphLogger::logInfo("Task " + m_name + " cancelled");
+            if (m_logger) m_logger->logWarning("Task cancelled");
             return false;
         }
 
-        Internal::TaskGraphLogger::logInfo("Task " + m_name + " completed");
+        if (m_logger) m_logger->logInfo("Task completed");
         m_status.store(Status::Done, std::memory_order_release);
         emit completed();
         return true;
@@ -380,5 +393,18 @@ namespace TaskGraph
     bool TaskContext::isCancelRequested() const
     {
         return m_task ? m_task->isCancelRequested() : false;
+    }
+
+    Log::LogObject& TaskContext::log()
+    {
+        return m_task->logger();
+    }
+
+    QVariant TaskContext::askGui(const QVariant& payload)
+    {
+        if (!m_scheduler || !m_task)
+            return QVariant();
+        const int id = m_scheduler->allocateGuiRequestId();
+        return m_scheduler->waitForGuiResponse(id, m_task, payload);
     }
 }

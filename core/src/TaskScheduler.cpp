@@ -1,6 +1,7 @@
 #include "TaskScheduler.h"
 #include "TaskGraphLogger.h"
 #include "CrashReport.h"
+#include "LogObject.h"
 #include <QMetaObject>
 #include <QMetaType>
 #include <unordered_map>
@@ -44,6 +45,85 @@ namespace TaskGraph
         , m_lastError(Error::noError)
         , m_failurePolicy(FailurePolicy::FailFast)
     {
+        m_logger = std::make_unique<Log::LogObject>(std::string("TaskScheduler"));
+    }
+
+    Log::LogObject& TaskScheduler::logger() { return *m_logger; }
+
+    int TaskScheduler::allocateGuiRequestId()
+    {
+        return m_nextGuiRequestId.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    QVariant TaskScheduler::waitForGuiResponse(int requestId, Task* task, const QVariant& payload)
+    {
+        auto req = std::make_shared<PendingGuiRequest>();
+        {
+            std::lock_guard<std::mutex> lock(m_pendingGuiMutex);
+            m_pendingGuiRequests[requestId] = req;
+        }
+
+        const QString taskName = task ? QString::fromStdString(task->getName()) : QString();
+        emit guiEventRequested(requestId, taskName, payload);
+
+        std::unique_lock<std::mutex> lk(req->m);
+        // Cooperative poll: if the task/graph is cancelled we exit without a value.
+        while (!req->ready && !req->cancelled)
+        {
+            if (m_cancelRequested.load(std::memory_order_acquire)
+                || (task && task->isCancelRequested()))
+            {
+                req->cancelled = true;
+                break;
+            }
+            req->cv.wait_for(lk, std::chrono::milliseconds(100));
+        }
+        const bool wasCancelled = req->cancelled;
+        QVariant out = req->ready ? req->response : QVariant();
+        lk.unlock();
+
+        {
+            std::lock_guard<std::mutex> lock(m_pendingGuiMutex);
+            m_pendingGuiRequests.erase(requestId);
+        }
+        (void)wasCancelled;
+        return out;
+    }
+
+    void TaskScheduler::respondToGuiEvent(int requestId, const QVariant& response)
+    {
+        std::shared_ptr<PendingGuiRequest> req;
+        {
+            std::lock_guard<std::mutex> lock(m_pendingGuiMutex);
+            auto it = m_pendingGuiRequests.find(requestId);
+            if (it == m_pendingGuiRequests.end())
+            {
+                if (m_logger) m_logger->logWarning("respondToGuiEvent: unknown or already-cancelled request id "
+                                                  + std::to_string(requestId));
+                return;
+            }
+            req = it->second;
+        }
+        {
+            std::lock_guard<std::mutex> lk(req->m);
+            req->response = response;
+            req->ready = true;
+        }
+        req->cv.notify_one();
+    }
+
+    void TaskScheduler::cancelAllPendingGuiRequests()
+    {
+        std::lock_guard<std::mutex> lock(m_pendingGuiMutex);
+        for (auto& kv : m_pendingGuiRequests)
+        {
+            auto& req = kv.second;
+            {
+                std::lock_guard<std::mutex> lk(req->m);
+                req->cancelled = true;
+            }
+            req->cv.notify_all();
+        }
     }
 
     TaskScheduler::~TaskScheduler()
@@ -180,6 +260,7 @@ namespace TaskGraph
                                               std::memory_order_acq_rel,
                                               std::memory_order_acquire))
             return;
+        if (m_logger) m_logger->logInfo("Graph paused");
         emit paused();
     }
 
@@ -191,6 +272,7 @@ namespace TaskGraph
                                               std::memory_order_acquire))
             return;
         m_cvTask.notify_all();
+        if (m_logger) m_logger->logInfo("Graph resumed");
         emit resumed();
     }
 
@@ -300,6 +382,11 @@ namespace TaskGraph
             m_lastError.store(Error::alreadyRunning, std::memory_order_release);
             return;
         }
+        runTasksBody();
+    }
+
+    void TaskScheduler::runTasksBody()
+    {
         RunningGuard guard(m_isRunning);
 
         ensureThreadsSpawned();
@@ -359,7 +446,7 @@ namespace TaskGraph
         }
 
         emit started();
-        Internal::TaskGraphLogger::logInfo("Executing tasks");
+        if (m_logger) m_logger->logInfo("Graph run started (" + std::to_string(m_totalTasks) + " tasks)");
         emit statusMessage(QStringLiteral("Executing tasks"));
         m_progress = 0;
         m_progressF.store(0.0f, std::memory_order_release);
@@ -392,6 +479,7 @@ namespace TaskGraph
                         && !m_cancelRequested.load(std::memory_order_acquire))
                     {
                         ++attempts;
+                        next->logger().logWarning("Task retry attempt " + std::to_string(attempts));
                         auto backoff = next->getRetryBackoff();
                         if (backoff.count() > 0)
                             std::this_thread::sleep_for(backoff);
@@ -417,6 +505,7 @@ namespace TaskGraph
         const bool wasCancelled = m_cancelRequested.load(std::memory_order_acquire);
         guard.disarm();
         m_isRunning.store(false, std::memory_order_release);
+        if (m_logger) m_logger->logInfo(wasCancelled ? "Graph run ended (cancelled)" : "Graph run completed");
         if (wasCancelled)
             emit cancelled();
         emit completed();
@@ -425,25 +514,36 @@ namespace TaskGraph
     void TaskScheduler::runTasksAsync()
     {
         m_lastError.store(Error::noError, std::memory_order_release);
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_isRunning.load(std::memory_order_acquire))
+
+        // Flip m_isRunning to true *synchronously* so that any caller polling
+        // isRunning() immediately after runTasksAsync() observes the scheduler
+        // as running. Without this, the async thread had not yet executed
+        // runTasks()'s compare_exchange, so a fast poller could see false and
+        // proceed as if the scheduler had already finished.
+        bool expected = false;
+        if (!m_isRunning.compare_exchange_strong(expected, true,
+                                                 std::memory_order_acq_rel,
+                                                 std::memory_order_acquire))
         {
             m_lastError.store(Error::alreadyRunning, std::memory_order_release);
             return;
         }
+
+        std::lock_guard<std::mutex> lock(m_mutex);
         if (m_asyncThread && m_asyncThread->joinable())
             m_asyncThread->join();
 
         m_asyncThread = std::make_shared<std::thread>([this]
         {
             TG_SCHEDULER_PROFILING_THREAD("AsyncThread");
-            runTasks();
+            runTasksBody();
         });
     }
 
     void TaskScheduler::cancel()
     {
         m_cancelRequested.store(true, std::memory_order_release);
+        if (m_logger) m_logger->logWarning("Graph cancel requested");
         {
             std::lock_guard<std::mutex> lock(m_mutex);
             for (const auto& t : m_allTasks)
@@ -451,6 +551,7 @@ namespace TaskGraph
             m_aborting = true;
             cancelPendingLocked();
         }
+        cancelAllPendingGuiRequests();
         m_cvTask.notify_all();
         m_cvComplete.notify_all();
     }
@@ -830,6 +931,7 @@ namespace TaskGraph
                         && !obj->m_cancelRequested.load(std::memory_order_acquire))
                     {
                         ++attempts;
+                        currentTask->logger().logWarning("Task retry attempt " + std::to_string(attempts));
                         auto backoff = currentTask->getRetryBackoff();
                         if (backoff.count() > 0)
                             std::this_thread::sleep_for(backoff);
