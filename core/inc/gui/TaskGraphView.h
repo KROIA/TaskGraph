@@ -18,7 +18,7 @@ namespace Gui
     public:
         explicit TaskGraphView(QWidget* parent = nullptr);
 
-        void setLeaderTarget(const QString& taskName, const QPointF& sceneCenter, const QRectF& sceneRect);
+        void setLeaderTarget(const QPointF& sceneCenter, const QRectF& sceneRect);
         void clearLeader();
         void setOverlay(TaskLogOverlay* overlay);
 

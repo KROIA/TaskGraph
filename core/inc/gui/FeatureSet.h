@@ -72,8 +72,6 @@ namespace Gui
         static FeatureSet editor()
         {
             FeatureSet fs = monitor();
-            fs.set(Feature::ShowInspector);
-            fs.set(Feature::ShowLog);
             fs.set(Feature::EditAddTask);
             fs.set(Feature::EditRemoveTask);
             fs.set(Feature::EditDependencies);

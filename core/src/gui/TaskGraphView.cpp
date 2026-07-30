@@ -50,7 +50,7 @@ namespace Gui
         m_overlay = overlay;
     }
 
-    void TaskGraphView::setLeaderTarget(const QString&, const QPointF& sceneCenter, const QRectF& sceneRect)
+    void TaskGraphView::setLeaderTarget(const QPointF& sceneCenter, const QRectF& sceneRect)
     {
         m_leaderActive = true;
         m_leaderNodeScene = sceneCenter;

@@ -16,7 +16,7 @@ namespace Gui
 
     QRectF TaskNodeItem::boundingRect() const
     {
-        return QRectF(0, 0, m_width, m_height);
+        return QRectF(0, 0, kWidth, kHeight);
     }
 
     void TaskNodeItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget)
@@ -44,12 +44,12 @@ namespace Gui
 
     QPointF TaskNodeItem::rightCenter() const
     {
-        return pos() + QPointF(m_width, m_height / 2.0);
+        return pos() + QPointF(kWidth, kHeight / 2.0);
     }
 
     QPointF TaskNodeItem::leftCenter() const
     {
-        return pos() + QPointF(0, m_height / 2.0);
+        return pos() + QPointF(0, kHeight / 2.0);
     }
 
     QColor TaskNodeItem::colorForStatus(Task::Status status)

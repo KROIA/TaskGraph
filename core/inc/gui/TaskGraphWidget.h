@@ -15,6 +15,7 @@ namespace Gui
     class TaskGraphView;
     class SchedulerControlBar;
     class TaskInspectorPanel;
+    class AggregateTaskLogView;
     class TaskLogOverlay;
     class TaskLogBuffer;
     class GuiPromptService;
@@ -33,7 +34,12 @@ namespace Gui
         void onGraphStructureChanged();
 
     private:
+        void createComponents();
+        void buildLayout();
+        void wireComponents();
+        void wireScheduler();
         void registerTaskLoggers();
+        void refreshAllNodeStatuses();
         void setUiIdle(bool idle);
 
         TaskScheduler* m_scheduler;
@@ -43,6 +49,7 @@ namespace Gui
         SchedulerControlBar* m_controlBar = nullptr;
         TaskInspectorPanel* m_inspector = nullptr;
         QWidget* m_logView = nullptr;
+        AggregateTaskLogView* m_aggregateLogView = nullptr;
         TaskLogOverlay* m_logOverlay = nullptr;
         TaskLogBuffer* m_logBuffer = nullptr;
         GuiPromptService* m_promptService = nullptr;

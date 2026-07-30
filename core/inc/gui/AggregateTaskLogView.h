@@ -11,8 +11,6 @@ class QTreeWidgetItem;
 
 namespace TaskGraph
 {
-    class TaskScheduler;
-
 namespace Gui
 {
     class TaskLogBuffer;
@@ -21,20 +19,19 @@ namespace Gui
     {
         Q_OBJECT
     public:
-        explicit AggregateTaskLogView(TaskScheduler* scheduler,
-                                      TaskLogBuffer* buffer,
+        explicit AggregateTaskLogView(TaskLogBuffer* buffer,
                                       QWidget* parent = nullptr);
 
     public slots:
         void clearAll();
 
     private:
-        TaskScheduler* m_scheduler;
         TaskLogBuffer* m_buffer;
         QTreeWidget* m_tree;
         QHash<QString, QTreeWidgetItem*> m_taskItems;
 
         QTreeWidgetItem* ensureTaskItem(const QString& taskName);
+        QTreeWidgetItem* appendMessage(const QString& taskName, const Log::Message& msg);
     };
 }
 }

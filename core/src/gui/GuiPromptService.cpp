@@ -34,8 +34,6 @@ namespace Gui
             m_activeDialog = nullptr;
         }
 
-        m_activeRequestId = requestId;
-
         auto* dlg = new QDialog(m_parentWidget);
         dlg->setWindowTitle("Task Prompt: " + taskName);
         dlg->setModal(false);
@@ -69,14 +67,12 @@ namespace Gui
             QString text = input->text();
             dlg->close();
             m_activeDialog = nullptr;
-            m_activeRequestId = -1;
             m_scheduler->respondToGuiEvent(capturedId, QVariant(text));
         });
 
         connect(cancelBtn, &QPushButton::clicked, dlg, [this, dlg, capturedId]() {
             dlg->close();
             m_activeDialog = nullptr;
-            m_activeRequestId = -1;
             m_scheduler->respondToGuiEvent(capturedId, QVariant());
         });
 
@@ -92,7 +88,6 @@ namespace Gui
             m_activeDialog->close();
             m_activeDialog->deleteLater();
             m_activeDialog = nullptr;
-            m_activeRequestId = -1;
         }
     }
 }

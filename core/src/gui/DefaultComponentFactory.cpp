@@ -1,9 +1,12 @@
 #include "gui/ITaskGraphComponentFactory.h"
 
 #if defined(QT_WIDGETS_ENABLED)
+#include "gui/TaskGraphScene.h"
 #include "gui/TaskGraphView.h"
 #include "gui/SchedulerControlBar.h"
 #include "gui/TaskInspectorPanel.h"
+#include "gui/AggregateTaskLogView.h"
+#include "gui/TaskLogOverlay.h"
 #include "gui/GuiPromptService.h"
 
 namespace TaskGraph
@@ -16,6 +19,11 @@ namespace Gui
         explicit DefaultComponentFactory(FeatureSet fs) : m_features(fs) {}
 
         const FeatureSet& features() const override { return m_features; }
+
+        TaskGraphScene* createScene(TaskScheduler* scheduler, QObject* parent) override
+        {
+            return new TaskGraphScene(scheduler, parent);
+        }
 
         TaskGraphView* createView(TaskScheduler* scheduler, QWidget* parent) override
         {
@@ -39,18 +47,24 @@ namespace Gui
             return new TaskInspectorPanel(scheduler, parent);
         }
 
-        QWidget* createLogView(TaskScheduler* scheduler, QWidget* parent) override
+        QWidget* createLogView(TaskScheduler* scheduler, TaskLogBuffer* logBuffer, QWidget* parent) override
         {
             TG_UNUSED(scheduler);
-            TG_UNUSED(parent);
-            return nullptr;
+            if (!m_features.has(Feature::ShowLog))
+                return nullptr;
+            return new AggregateTaskLogView(logBuffer, parent);
         }
 
-        QWidget* createGuiPromptService(TaskScheduler* scheduler, QWidget* parent) override
+        TaskLogOverlay* createLogOverlay(TaskLogBuffer* logBuffer, QWidget* parent) override
         {
-            TG_UNUSED(scheduler);
-            TG_UNUSED(parent);
-            return nullptr;
+            return new TaskLogOverlay(logBuffer, parent);
+        }
+
+        GuiPromptService* createGuiPromptService(TaskScheduler* scheduler, QWidget* parentWidget, QObject* parent) override
+        {
+            if (!m_features.has(Feature::GuiRoundTrip))
+                return nullptr;
+            return new GuiPromptService(scheduler, parentWidget, parent);
         }
 
     private:

@@ -31,8 +31,8 @@ namespace Gui
 
         QString m_name;
         Task::Status m_status = Task::Status::Pending;
-        static constexpr qreal m_width = 140.0;
-        static constexpr qreal m_height = 50.0;
+        static constexpr qreal kWidth = 140.0;
+        static constexpr qreal kHeight = 50.0;
     };
 }
 }

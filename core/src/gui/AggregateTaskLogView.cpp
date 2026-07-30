@@ -2,8 +2,6 @@
 
 #if defined(QT_WIDGETS_ENABLED)
 #include "gui/TaskLogBuffer.h"
-#include "TaskScheduler.h"
-#include "Task.h"
 #include "LogMessage.h"
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -20,11 +18,9 @@ namespace Gui
     }
 
     AggregateTaskLogView::AggregateTaskLogView(
-        TaskScheduler* scheduler,
         TaskLogBuffer* buffer,
         QWidget* parent)
         : QWidget(parent)
-        , m_scheduler(scheduler)
         , m_buffer(buffer)
     {
         auto* layout = new QVBoxLayout(this);
@@ -39,29 +35,26 @@ namespace Gui
 
         connect(m_buffer, &TaskLogBuffer::messageBuffered,
                 this, [this](Log::LoggerID, QString taskName, Log::Message msg) {
-            QTreeWidgetItem* parent = ensureTaskItem(taskName);
-            auto* child = new QTreeWidgetItem(parent);
-            child->setText(0, QString::fromStdString(msg.getText()));
-            colorTreeItem(child, msg);
-            parent->setExpanded(true);
-            m_tree->scrollToItem(child);
+            m_tree->scrollToItem(appendMessage(taskName, msg));
         });
 
         auto tasks = m_buffer->tasksInOrder();
         for (const auto& taskName : tasks)
         {
             auto msgs = m_buffer->messagesForTask(taskName);
-            if (msgs.isEmpty())
-                continue;
-            QTreeWidgetItem* parent = ensureTaskItem(taskName);
             for (const auto& msg : msgs)
-            {
-                auto* child = new QTreeWidgetItem(parent);
-                child->setText(0, QString::fromStdString(msg.getText()));
-                colorTreeItem(child, msg);
-            }
-            parent->setExpanded(true);
+                appendMessage(taskName, msg);
         }
+    }
+
+    QTreeWidgetItem* AggregateTaskLogView::appendMessage(const QString& taskName, const Log::Message& msg)
+    {
+        QTreeWidgetItem* parent = ensureTaskItem(taskName);
+        auto* child = new QTreeWidgetItem(parent);
+        child->setText(0, QString::fromStdString(msg.getText()));
+        colorTreeItem(child, msg);
+        parent->setExpanded(true);
+        return child;
     }
 
     void AggregateTaskLogView::clearAll()

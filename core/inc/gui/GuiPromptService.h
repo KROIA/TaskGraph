@@ -27,7 +27,6 @@ namespace Gui
         TaskScheduler* m_scheduler;
         QWidget* m_parentWidget;
         QDialog* m_activeDialog = nullptr;
-        int m_activeRequestId = -1;
     };
 }
 }
