@@ -133,6 +133,7 @@ int main(int argc, char* argv[])
 	task10->addDependency(task9);
 	task10->addDependency(task8);
 	task10->addDependency(task7);
+	task10->addDependency(askTask);
 
 	task9->addDependency(task6);
 	task8->addDependency(task5);
