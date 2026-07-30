@@ -44,6 +44,30 @@ class TestTask : public TaskGraph::Task
 	}
 };
 
+class AskGuiTask : public TaskGraph::Task
+{
+public:
+	AskGuiTask(const std::string& name)
+		: TaskGraph::Task(name)
+	{
+	}
+private:
+	void work(TaskGraph::TaskContext& ctx) override
+	{
+		logger().logInfo(getName() + " requesting GUI input...");
+		QVariant response = ctx.askGui(QVariant("What value should " + QString::fromStdString(getName()) + " use?"));
+		if (!response.isValid())
+		{
+			logger().logWarning(getName() + " got no response (cancelled?)");
+			return;
+		}
+		std::string val = response.toString().toStdString();
+		logger().logInfo(getName() + " got response: " + val);
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		logger().logInfo(getName() + " done with value: " + val);
+	}
+};
+
 void exiting();
 void exceptionCallback();
 int main(int argc, char* argv[])
@@ -71,7 +95,7 @@ int main(int argc, char* argv[])
 #endif*/
 
 	Log::UI::NativeConsoleView consoleView;
-	
+
 	unsigned int hwThreads = std::thread::hardware_concurrency();
 	TaskGraph::TaskScheduler scheduler(hwThreads > 0 ? hwThreads : 8);
 	std::shared_ptr<TestTask> task1 = std::make_shared<TestTask>(std::string("Task1"));
@@ -84,6 +108,7 @@ int main(int argc, char* argv[])
 	std::shared_ptr<TestTask> task8 = std::make_shared<TestTask>(std::string("Task8"));
 	std::shared_ptr<TestTask> task9 = std::make_shared<TestTask>(std::string("Task9"));
 	std::shared_ptr<TestTask> task10 = std::make_shared<TestTask>(std::string("Task10"));
+	auto askTask = std::make_shared<AskGuiTask>(std::string("AskGuiTask"));
 
 	// give some tasks non-default config for inspector demo
 	task1->setWeight(2.0f);
@@ -103,6 +128,7 @@ int main(int argc, char* argv[])
 	scheduler.addTask(task8);
 	scheduler.addTask(task9);
 	scheduler.addTask(task10);
+	scheduler.addTask(askTask);
 
 	task10->addDependency(task9);
 	task10->addDependency(task8);
@@ -119,10 +145,13 @@ int main(int argc, char* argv[])
 	task5->addDependency(task1);
 	task5->addDependency(task2);
 
+	// askTask depends on task1 so it runs after, prompts GUI mid-run
+	askTask->addDependency(task1);
+
 #ifdef QT_WIDGETS_ENABLED
-	TaskGraph::Gui::TaskGraphWidget graphWidget(&scheduler, TaskGraph::Gui::presetMonitorFactory());
-	graphWidget.resize(900, 600);
-	graphWidget.setWindowTitle("TaskGraph Monitor");
+	TaskGraph::Gui::TaskGraphWidget graphWidget(&scheduler, TaskGraph::Gui::presetEditorFactory());
+	graphWidget.resize(1100, 700);
+	graphWidget.setWindowTitle("TaskGraph Editor");
 	graphWidget.show();
 
 	scheduler.runTasksAsync();
@@ -147,7 +176,7 @@ int main(int argc, char* argv[])
 
 void exiting()
 {
-	
+
 }
 void exceptionCallback()
 {

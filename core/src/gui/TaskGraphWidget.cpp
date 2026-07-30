@@ -8,6 +8,7 @@
 #include "gui/TaskLogOverlay.h"
 #include "gui/TaskLogBuffer.h"
 #include "gui/AggregateTaskLogView.h"
+#include "gui/GuiPromptService.h"
 #include "TaskScheduler.h"
 #include "Task.h"
 #include <QVBoxLayout>
@@ -41,7 +42,15 @@ namespace Gui
         // inspector from factory
         auto* inspectorWidget = m_factory->createInspector(m_scheduler, this);
         if (inspectorWidget)
+        {
             m_inspector = qobject_cast<TaskInspectorPanel*>(inspectorWidget);
+            if (m_inspector)
+            {
+                m_inspector->setFeatures(m_factory->features());
+                connect(m_inspector, &TaskInspectorPanel::graphStructureChanged,
+                        this, &TaskGraphWidget::onGraphStructureChanged);
+            }
+        }
 
         AggregateTaskLogView* aggView = nullptr;
         if (m_factory->features().has(Feature::ShowLog))
@@ -50,7 +59,11 @@ namespace Gui
             m_logView = aggView;
         }
 
-        // build the center area: graph view (+ optional log below) | inspector right
+        // GUI prompt service (gated by feature)
+        if (m_factory->features().has(Feature::GuiRoundTrip))
+            m_promptService = new GuiPromptService(m_scheduler, this, this);
+
+        // build the center area
         QWidget* graphArea = nullptr;
         if (m_logView && m_view)
         {
@@ -76,8 +89,8 @@ namespace Gui
         {
             auto* hSplitter = new QSplitter(Qt::Horizontal, this);
             hSplitter->addWidget(graphArea);
-            m_inspector->setMinimumWidth(200);
-            m_inspector->setMaximumWidth(350);
+            m_inspector->setMinimumWidth(220);
+            m_inspector->setMaximumWidth(400);
             hSplitter->addWidget(m_inspector);
             hSplitter->setStretchFactor(0, 4);
             hSplitter->setStretchFactor(1, 1);
@@ -139,15 +152,15 @@ namespace Gui
                 m_view->clearLeader();
             if (m_inspector)
                 m_inspector->clearSelection();
+            setUiIdle(true);
         });
-        connect(m_scheduler, &TaskScheduler::cancelled, this, [this]() {
-            auto graph = m_scheduler->getTaskGraph();
-            for (const auto& layer : graph)
-                for (const auto& task : layer)
-                    m_scene->updateNodeStatus(
-                        QString::fromStdString(task->getName()),
-                        task->getStatus());
+
+        connect(m_scheduler, &TaskScheduler::started, this, [this]() {
+            m_scene->rebuild();
+            registerTaskLoggers();
+            setUiIdle(false);
         });
+
         connect(m_scheduler, &TaskScheduler::completed, this, [this]() {
             auto graph = m_scheduler->getTaskGraph();
             for (const auto& layer : graph)
@@ -155,11 +168,28 @@ namespace Gui
                     m_scene->updateNodeStatus(
                         QString::fromStdString(task->getName()),
                         task->getStatus());
+            setUiIdle(true);
         });
-        connect(m_scheduler, &TaskScheduler::started, this, [this]() {
-            m_scene->rebuild();
-            registerTaskLoggers();
+
+        connect(m_scheduler, &TaskScheduler::cancelled, this, [this]() {
+            auto graph = m_scheduler->getTaskGraph();
+            for (const auto& layer : graph)
+                for (const auto& task : layer)
+                    m_scene->updateNodeStatus(
+                        QString::fromStdString(task->getName()),
+                        task->getStatus());
+            setUiIdle(true);
         });
+
+        // initial state
+        setUiIdle(true);
+    }
+
+    void TaskGraphWidget::setUiIdle(bool idle)
+    {
+        m_idle = idle;
+        if (m_inspector)
+            m_inspector->setEditingEnabled(idle);
     }
 
     void TaskGraphWidget::registerTaskLoggers()
@@ -174,11 +204,9 @@ namespace Gui
 
     void TaskGraphWidget::onNodeSelected(const QString& taskName)
     {
-        // update inspector
         if (m_inspector)
             m_inspector->inspectTask(taskName);
 
-        // update log overlay + leader line
         auto graph = m_scheduler->getTaskGraph();
         for (const auto& layer : graph)
         {
@@ -196,6 +224,12 @@ namespace Gui
                 }
             }
         }
+    }
+
+    void TaskGraphWidget::onGraphStructureChanged()
+    {
+        m_scene->rebuild();
+        registerTaskLoggers();
     }
 }
 }

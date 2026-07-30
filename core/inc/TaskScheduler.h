@@ -79,6 +79,7 @@ namespace TaskGraph
         bool disableThreads();
 
         bool addTask(const std::shared_ptr<Task>& task);
+        bool removeTask(const std::shared_ptr<Task>& task);
 
         void runTasks();
         void runTasksAsync();

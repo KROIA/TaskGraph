@@ -4,6 +4,7 @@
 #include "gui/TaskGraphView.h"
 #include "gui/SchedulerControlBar.h"
 #include "gui/TaskInspectorPanel.h"
+#include "gui/GuiPromptService.h"
 
 namespace TaskGraph
 {

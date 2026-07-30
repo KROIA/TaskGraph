@@ -308,6 +308,51 @@ namespace TaskGraph
         return true;
     }
 
+    bool TaskScheduler::removeTask(const std::shared_ptr<Task>& task)
+    {
+        m_lastError.store(Error::noError, std::memory_order_release);
+        if (m_isRunning.load(std::memory_order_acquire))
+        {
+            Internal::TaskGraphLogger::logError("Cannot remove task while the TaskScheduler is running");
+            m_lastError.store(Error::busy, std::memory_order_release);
+            return false;
+        }
+        std::lock_guard<std::mutex> lock(m_mutex);
+        auto it = std::find(m_allTasks.begin(), m_allTasks.end(), task);
+        if (it == m_allTasks.end())
+            return false;
+
+        // detach from other tasks' dependency lists
+        for (const auto& other : m_allTasks)
+        {
+            if (other == task)
+                continue;
+            auto deps = other->getDependencies();
+            bool hadDep = false;
+            for (const auto& d : deps)
+            {
+                if (d == task)
+                {
+                    hadDep = true;
+                    break;
+                }
+            }
+            if (hadDep)
+            {
+                other->clearDependencies();
+                for (const auto& d : deps)
+                {
+                    if (d != task)
+                        other->addDependency(d);
+                }
+            }
+        }
+
+        m_allTasks.erase(it);
+        m_taskGraph.clear();
+        return true;
+    }
+
     TaskScheduler::Error TaskScheduler::buildTaskGraph(std::vector<TaskList> &taskGraph) const
     {
         TG_SCHEDULER_PROFILING_FUNCTION(TG_COLOR_STAGE_2);
