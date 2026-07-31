@@ -526,11 +526,14 @@ namespace TaskGraph
                 }
                 // Sync mode: no watchdog thread arming; run inline with retries.
                 int attempts = 0;
-                TaskContext ctx(next.get(), this);
+                // One context per task-run, reused across all retry attempts.
+                std::unique_ptr<TaskContext> ctx = m_contextFactory
+                    ? m_contextFactory(next.get(), this)
+                    : std::make_unique<TaskContext>(next.get(), this);
                 while (true)
                 {
                     armWatchdog(next);
-                    next->runTask(&ctx);
+                    next->runTask(ctx.get());
                     if (next->getStatus() == Task::Status::Failed
                         && attempts < next->getMaxRetries()
                         && !m_cancelRequested.load(std::memory_order_acquire))
@@ -976,9 +979,11 @@ namespace TaskGraph
                 std::shared_ptr<Task> t = currentTask;
                 TaskScheduler* self = obj;
                 QMetaObject::invokeMethod(t.get(), [t, self]() {
-                    TaskContext ctx(t.get(), self);
+                    std::unique_ptr<TaskContext> ctx = self->m_contextFactory
+                        ? self->m_contextFactory(t.get(), self)
+                        : std::make_unique<TaskContext>(t.get(), self);
                     self->armWatchdog(t);
-                    t->runTask(&ctx);
+                    t->runTask(ctx.get());
                     self->onTaskCompleted(t);
                 }, Qt::QueuedConnection);
             }
@@ -988,11 +993,14 @@ namespace TaskGraph
                 TG_GENERAL_PROFILING_NONSCOPED_BLOCK("Process task", TG_COLOR_STAGE_2);
 
                 int attempts = 0;
-                TaskContext ctx(currentTask.get(), obj);
+                // One context per task-run, reused across all retry attempts.
+                std::unique_ptr<TaskContext> ctx = obj->m_contextFactory
+                    ? obj->m_contextFactory(currentTask.get(), obj)
+                    : std::make_unique<TaskContext>(currentTask.get(), obj);
                 while (true)
                 {
                     obj->armWatchdog(currentTask);
-                    currentTask->runTask(&ctx);
+                    currentTask->runTask(ctx.get());
                     if (currentTask->getStatus() == Task::Status::Failed
                         && attempts < currentTask->getMaxRetries()
                         && !obj->m_cancelRequested.load(std::memory_order_acquire))

@@ -13,6 +13,8 @@
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
+#include <memory>
 
 namespace Log { class LogObject; }
 
@@ -80,6 +82,23 @@ namespace TaskGraph
 
         bool addTask(const std::shared_ptr<Task>& task);
         bool removeTask(const std::shared_ptr<Task>& task);
+
+        /// <summary>
+        /// Factory that builds the TaskContext handed to a task body. Lets an app
+        /// supply a derived context (extra per-run state) without templatizing the
+        /// scheduler. The scheduler owns the returned context for the duration of a
+        /// single task-run and passes it to the body as a base TaskContext&amp;.
+        /// </summary>
+        using ContextFactory = std::function<std::unique_ptr<TaskContext>(Task* task, TaskScheduler* scheduler)>;
+
+        /// <summary>
+        /// Install (or clear, by passing {}) the context factory. When set, it is
+        /// invoked once per task-run to build that run's context; when unset, a base
+        /// TaskContext is constructed. Thread-safety: the factory is invoked on the
+        /// worker thread running the task, so it must be safe to call concurrently
+        /// from multiple worker threads.
+        /// </summary>
+        void setContextFactory(ContextFactory factory) { m_contextFactory = std::move(factory); }
 
         void runTasks();
         void runTasksAsync();
@@ -188,6 +207,8 @@ namespace TaskGraph
 
         double m_weightSum;
         double m_completedWeight;
+
+        ContextFactory m_contextFactory;
 
         std::shared_ptr<std::thread> m_asyncThread = nullptr;
         mutable std::atomic<Error> m_lastError;

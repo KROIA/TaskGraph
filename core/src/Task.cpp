@@ -384,6 +384,8 @@ namespace TaskGraph
     }
 
     // ---- TaskContext ----
+    TaskContext::~TaskContext() = default;
+
     void TaskContext::setResult(std::any value)
     {
         if (m_task)

@@ -34,6 +34,13 @@ namespace TaskGraph
         TaskContext(Task* task, TaskScheduler* scheduler)
             : m_task(task), m_scheduler(scheduler) {}
 
+        /// <summary>
+        /// Virtual so an app-supplied derived context can be owned and destroyed
+        /// polymorphically through a base TaskContext pointer (see
+        /// TaskScheduler::setContextFactory).
+        /// </summary>
+        virtual ~TaskContext();
+
         void setResult(std::any value);
         bool isCancelRequested() const;
 

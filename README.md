@@ -19,6 +19,7 @@ A C++23 / Qt5 task-graph scheduler library. Define tasks as nodes in a directed 
 - **Remove task** -- `scheduler.removeTask(task)` while idle; detaches from all dependency lists
 - **Per-task logging** -- each `Task` has its own `Log::LogObject` via `task->logger()`; `ctx.log()` in bodies; scheduler-level `scheduler.logger()`
 - **GUI round-trip** -- `ctx.askGui(payload)` blocks a worker until the GUI thread responds via `respondToGuiEvent`; cancellation-aware
+- **Pluggable context** -- `scheduler.setContextFactory(...)` supplies an app-specific `TaskContext` subclass to every task body without templatizing the scheduler
 - **Qt visualization** -- drop-in `TaskGraphWidget` with orthogonal edge routing, live status recolor, control bar, inspector panel, log views, and interactive editing (see [Qt Visualization Widget](#qt-visualization-widget))
 
 ## Requirements and Build
@@ -309,6 +310,34 @@ Returns `false` if the scheduler is currently running.
 ### Re-running after cancel
 
 `runTasks` / `runTasksAsync` automatically resets all tasks to `Pending` at the start of each run. There is no need to call `resetTasks()` between runs. Each invocation is a fresh full re-run; prior results are cleared.
+
+### Custom execution context
+
+By default every task body receives a base `TaskContext`. To hand tasks an application-specific context -- carrying app services (resource maps, config, IO wrappers bound to the task's logger) -- supply a factory. The scheduler builds your derived context per task-run and passes it to the body as a base `TaskContext&`; downcast in the body.
+
+```cpp
+struct MyCtx : TaskGraph::TaskContext
+{
+    MyCtx(TaskGraph::Task* t, TaskGraph::TaskScheduler* s, AppServices* svc)
+        : TaskGraph::TaskContext(t, s), services(svc) {}
+    AppServices* services;
+};
+
+scheduler.setContextFactory(
+    [svc](TaskGraph::Task* t, TaskGraph::TaskScheduler* s)
+        -> std::unique_ptr<TaskGraph::TaskContext>
+    {
+        return std::make_unique<MyCtx>(t, s, svc);
+    });
+
+task->setWorkFunction([](TaskGraph::TaskContext& ctx) {
+    auto& my = static_cast<MyCtx&>(ctx);
+    my.services->doThing();
+    my.setResult(std::any(1)); // base facilities still work
+});
+```
+
+Pass `{}` to `setContextFactory` to clear it and restore the default base context. One context is built per task-run and reused across that task's retry attempts, then destroyed when the run returns (`TaskContext` has a virtual destructor). The factory is invoked on the worker thread that runs the task, so it must be safe to call concurrently -- a typical implementation just allocates a struct holding references. `Task` and `TaskScheduler` remain non-template `QObject`s; the work-function signature is unchanged.
 
 ### Task affinity
 
