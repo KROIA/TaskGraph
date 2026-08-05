@@ -26,11 +26,33 @@ namespace Gui
 
         QColor fill = colorForStatus(m_status);
         painter->setBrush(fill);
-        painter->setPen(isSelected() ? QPen(Qt::blue, 2) : QPen(Qt::black, 1));
+        painter->setPen(isSelected() ? QPen(Qt::blue, 2) : QPen(m_border, 1));
         painter->drawRoundedRect(boundingRect(), 8, 8);
 
-        painter->setPen(Qt::black);
+        painter->setPen(m_text);
         painter->drawText(boundingRect(), Qt::AlignCenter, m_name);
+    }
+
+    void TaskNodeItem::setPalette(const QColor& border, const QColor& text)
+    {
+        m_border = border;
+        m_text = text;
+        update();
+    }
+
+    void TaskNodeItem::setStatusColors(const QColor& pending, const QColor& ready,
+                                       const QColor& running, const QColor& done,
+                                       const QColor& failed, const QColor& cancelled,
+                                       const QColor& skipped)
+    {
+        m_statusPending = pending;
+        m_statusReady = ready;
+        m_statusRunning = running;
+        m_statusDone = done;
+        m_statusFailed = failed;
+        m_statusCancelled = cancelled;
+        m_statusSkipped = skipped;
+        update();
     }
 
     void TaskNodeItem::setTaskStatus(Task::Status status)
@@ -52,19 +74,19 @@ namespace Gui
         return pos() + QPointF(0, kHeight / 2.0);
     }
 
-    QColor TaskNodeItem::colorForStatus(Task::Status status)
+    QColor TaskNodeItem::colorForStatus(Task::Status status) const
     {
         switch (status)
         {
-        case Task::Status::Pending:   return QColor(200, 200, 200);
-        case Task::Status::Ready:     return QColor(173, 216, 230);
-        case Task::Status::Running:   return QColor(255, 255, 100);
-        case Task::Status::Done:      return QColor(100, 200, 100);
-        case Task::Status::Failed:    return QColor(220, 60, 60);
-        case Task::Status::Cancelled: return QColor(120, 120, 120);
-        case Task::Status::Skipped:   return QColor(210, 180, 140);
+        case Task::Status::Pending:   return m_statusPending;
+        case Task::Status::Ready:     return m_statusReady;
+        case Task::Status::Running:   return m_statusRunning;
+        case Task::Status::Done:      return m_statusDone;
+        case Task::Status::Failed:    return m_statusFailed;
+        case Task::Status::Cancelled: return m_statusCancelled;
+        case Task::Status::Skipped:   return m_statusSkipped;
         }
-        return QColor(200, 200, 200);
+        return m_statusPending;
     }
 }
 }

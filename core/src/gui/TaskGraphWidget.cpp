@@ -26,13 +26,22 @@ namespace Gui
         , m_scheduler(scheduler)
         , m_factory(factory ? factory : presetMonitorFactory())
     {
+        m_baseFeatures = m_factory->features();
+
         createComponents();
         buildLayout();
         wireComponents();
         wireScheduler();
 
-        m_scene->rebuild();
+        m_scene->setVisualConfig(m_visualConfig);
         setUiIdle(true);
+    }
+
+    void TaskGraphWidget::setVisualConfig(const GraphVisualConfig& config)
+    {
+        m_visualConfig = config;
+        if (m_scene)
+            m_scene->setVisualConfig(config); // stores + rebuilds
     }
 
     void TaskGraphWidget::createComponents()
@@ -126,6 +135,12 @@ namespace Gui
                     this, &TaskGraphWidget::onNodeDoubleClicked);
         }
 
+        if (m_controlBar)
+        {
+            connect(m_controlBar, &SchedulerControlBar::viewerModeToggled,
+                    this, &TaskGraphWidget::setReadOnly);
+        }
+
         if (m_view && m_logOverlay)
         {
             m_view->setOverlay(m_logOverlay);
@@ -200,6 +215,29 @@ namespace Gui
         m_idle = idle;
         if (m_inspector)
             m_inspector->setEditingEnabled(idle);
+    }
+
+    void TaskGraphWidget::setReadOnly(bool ro)
+    {
+        if (ro == m_readOnly)
+            return;
+        m_readOnly = ro;
+
+        FeatureSet effective = m_baseFeatures;
+        if (ro)
+        {
+            effective.set(Feature::EditAddTask, false);
+            effective.set(Feature::EditRemoveTask, false);
+            effective.set(Feature::EditDependencies, false);
+            effective.set(Feature::EditTaskConfig, false);
+        }
+
+        if (m_inspector)
+            m_inspector->setFeatures(effective);
+        if (m_controlBar)
+            m_controlBar->setRunControlsEnabled(!ro);
+
+        emit readOnlyChanged(ro);
     }
 
     void TaskGraphWidget::registerTaskLoggers()

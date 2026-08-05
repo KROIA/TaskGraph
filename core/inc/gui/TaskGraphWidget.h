@@ -2,6 +2,7 @@
 
 #include "TaskGraph_global.h"
 #include "gui/ITaskGraphComponentFactory.h"
+#include "gui/GraphVisualConfig.h"
 #include <memory>
 #include <QWidget>
 
@@ -29,6 +30,15 @@ namespace Gui
             std::shared_ptr<ITaskGraphComponentFactory> factory = nullptr,
             QWidget* parent = nullptr);
 
+        void setReadOnly(bool ro);
+        bool isReadOnly() const { return m_readOnly; }
+
+        void setVisualConfig(const GraphVisualConfig& config);
+        const GraphVisualConfig& visualConfig() const { return m_visualConfig; }
+
+    signals:
+        void readOnlyChanged(bool);
+
     private slots:
         void onNodeSelected(const QString& taskName);
         void onNodeDoubleClicked(const QString& taskName);
@@ -54,7 +64,10 @@ namespace Gui
         TaskLogOverlay* m_logOverlay = nullptr;
         TaskLogBuffer* m_logBuffer = nullptr;
         GuiPromptService* m_promptService = nullptr;
+        FeatureSet m_baseFeatures;
+        GraphVisualConfig m_visualConfig = GraphVisualConfig::light();
         bool m_idle = true;
+        bool m_readOnly = false;
     };
 }
 }

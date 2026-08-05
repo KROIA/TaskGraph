@@ -2,6 +2,7 @@
 
 #include "TaskGraph_global.h"
 #include "Task.h"
+#include "gui/GraphVisualConfig.h"
 
 #include <QGraphicsScene>
 #include <QHash>
@@ -24,6 +25,8 @@ namespace Gui
         explicit TaskGraphScene(TaskScheduler* scheduler, QObject* parent = nullptr);
 
         void rebuild();
+        void setVisualConfig(const GraphVisualConfig& config);
+        const GraphVisualConfig& visualConfig() const { return m_config; }
         void updateNodeStatus(const QString& name, Task::Status status);
         QPointF nodeCenter(const QString& name) const;
         QRectF nodeSceneRect(const QString& name) const;
@@ -33,6 +36,7 @@ namespace Gui
 
     private:
         TaskScheduler* m_scheduler;
+        GraphVisualConfig m_config = GraphVisualConfig::light();
         QHash<QString, QList<TaskNodeItem*>> m_nodesByName;
         QList<TaskEdgeItem*> m_edges;
     };

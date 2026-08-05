@@ -5,6 +5,7 @@
 
 #include <QGraphicsObject>
 #include <QString>
+#include <QColor>
 
 namespace TaskGraph
 {
@@ -23,16 +24,32 @@ namespace Gui
         Task::Status taskStatus() const { return m_status; }
         QString taskName() const { return m_name; }
 
+        void setPalette(const QColor& border, const QColor& text);
+        void setStatusColors(const QColor& pending, const QColor& ready,
+                             const QColor& running, const QColor& done,
+                             const QColor& failed, const QColor& cancelled,
+                             const QColor& skipped);
+
         QPointF rightCenter() const;
         QPointF leftCenter() const;
 
     private:
-        static QColor colorForStatus(Task::Status status);
+        QColor colorForStatus(Task::Status status) const;
 
         QString m_name;
         Task::Status m_status = Task::Status::Pending;
         static constexpr qreal kWidth = 140.0;
         static constexpr qreal kHeight = 50.0;
+
+        QColor m_border = QColor(0, 0, 0);
+        QColor m_text = QColor(0, 0, 0);
+        QColor m_statusPending   = QColor(200, 200, 200);
+        QColor m_statusReady     = QColor(173, 216, 230);
+        QColor m_statusRunning   = QColor(255, 255, 100);
+        QColor m_statusDone      = QColor(100, 200, 100);
+        QColor m_statusFailed    = QColor(220, 60, 60);
+        QColor m_statusCancelled = QColor(120, 120, 120);
+        QColor m_statusSkipped   = QColor(210, 180, 140);
     };
 }
 }

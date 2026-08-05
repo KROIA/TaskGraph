@@ -47,6 +47,16 @@
 
 /// USER_SECTION_START 2
 
+// ---------------------------------------------------------------------------
+// GUI debug overlays
+// ---------------------------------------------------------------------------
+// Draw the invisible edge-routing waypoints in the task-graph view:
+//   red  = column waypoints (dummy nodes a long edge crosses)
+//   blue = perpendicular port anchors
+// Set to 1 to enable, 0 to disable. The env var TASKGRAPH_DEBUG_WAYPOINTS
+// still force-enables it at runtime regardless of this value.
+#define TASKGRAPH_DEBUG_DRAW_WAYPOINTS 0
+
 /// USER_SECTION_END
 
 // ---------------------------------------------------------------------------

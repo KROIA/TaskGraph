@@ -5,9 +5,13 @@
 #include "gui/TaskEdgeItem.h"
 #include "gui/GraphLayout.h"
 #include "TaskScheduler.h"
+#include "TaskGraph_debug.h"
 
 #include <QMap>
 #include <QSet>
+#include <QColor>
+#include <QBrush>
+#include <QPen>
 #include <algorithm>
 
 namespace TaskGraph
@@ -26,193 +30,74 @@ namespace Gui
         m_nodesByName.clear();
         m_edges.clear();
 
+        setBackgroundBrush(QBrush(m_config.background));
+
         std::vector<TaskList> graph = m_scheduler->getTaskGraph();
-        QHash<QString, QPointF> positions = GraphLayout::compute(graph);
+        LayoutResult layout = GraphLayout::computeLayout(graph, m_config);
 
-        constexpr qreal nodeW = GraphLayout::nodeWidth;
-        constexpr qreal nodeH = GraphLayout::nodeHeight;
-        constexpr qreal hGap  = GraphLayout::hGap;
-        constexpr qreal channelMargin = 12.0; // clearance from node edges to channels
-        constexpr qreal portMargin   = 6.0;  // inset ports from node top/bottom
-
-        // Build name -> layer index map
-        QHash<QString, int> layerOf;
-        for (size_t layer = 0; layer < graph.size(); ++layer)
-        {
-            for (const auto& task : graph[layer])
-            {
-                QString name = QString::fromStdString(task->getName());
-                layerOf[name] = static_cast<int>(layer);
-            }
-        }
-
-        // Create nodes
+        // Create nodes from the computed positions.
         for (const auto& layer : graph)
         {
             for (const auto& task : layer)
             {
                 QString name = QString::fromStdString(task->getName());
                 auto* node = new TaskNodeItem(name);
-                if (positions.contains(name))
-                    node->setPos(positions.value(name));
+                if (layout.nodePositions.contains(name))
+                    node->setPos(layout.nodePositions.value(name));
+                node->setPalette(m_config.nodeBorder, m_config.nodeText);
+                node->setStatusColors(m_config.statusPending, m_config.statusReady,
+                    m_config.statusRunning, m_config.statusDone, m_config.statusFailed,
+                    m_config.statusCancelled, m_config.statusSkipped);
                 node->setTaskStatus(task->getStatus());
                 addItem(node);
                 m_nodesByName[name].append(node);
             }
         }
 
-        // Collect all edges
-        struct PendingEdge
+        // Create edges from the computed routes.
+        for (const EdgeRoute& route : layout.edges)
         {
-            TaskNodeItem* from;
-            TaskNodeItem* to;
-            QString fromName;
-            QString toName;
-            int channel; // source layer index
-        };
-        QVector<PendingEdge> edges;
+            if (!m_nodesByName.contains(route.fromName)
+                || !m_nodesByName.contains(route.toName))
+                continue;
 
-        for (const auto& layer : graph)
-        {
-            for (const auto& task : layer)
-            {
-                QString taskName = QString::fromStdString(task->getName());
-                auto deps = task->getDependencies();
-                for (const auto& dep : deps)
-                {
-                    QString depName = QString::fromStdString(dep->getName());
-                    if (m_nodesByName.contains(depName) && m_nodesByName.contains(taskName))
-                    {
-                        TaskNodeItem* fromNode = m_nodesByName[depName].first();
-                        TaskNodeItem* toNode = m_nodesByName[taskName].first();
-                        int channel = layerOf.value(depName, 0);
-                        edges.append({ fromNode, toNode, depName, taskName, channel });
-                    }
-                }
-            }
-        }
-
-        // --- Port assignment ---
-        // Group edges by source node (outgoing) and target node (incoming)
-        QHash<QString, QVector<int>> outgoingEdges;
-        QHash<QString, QVector<int>> incomingEdges;
-
-        for (int i = 0; i < edges.size(); ++i)
-        {
-            outgoingEdges[edges[i].fromName].append(i);
-            incomingEdges[edges[i].toName].append(i);
-        }
-
-        // Sort outgoing edges by target Y so ports are ordered top-to-bottom
-        for (auto it = outgoingEdges.begin(); it != outgoingEdges.end(); ++it)
-        {
-            QVector<int>& idx = it.value();
-            std::sort(idx.begin(), idx.end(), [&](int a, int b)
-            {
-                return edges[a].to->pos().y() < edges[b].to->pos().y();
-            });
-        }
-
-        // Sort incoming edges by source Y
-        for (auto it = incomingEdges.begin(); it != incomingEdges.end(); ++it)
-        {
-            QVector<int>& idx = it.value();
-            std::sort(idx.begin(), idx.end(), [&](int a, int b)
-            {
-                return edges[a].from->pos().y() < edges[b].from->pos().y();
-            });
-        }
-
-        // Compute per-edge exit port (right edge of source node)
-        // and entry port (left edge of target node)
-        QVector<QPointF> exitPort(edges.size());
-        QVector<QPointF> entryPort(edges.size());
-
-        // Distribute ports within [portMargin, nodeH - portMargin] to keep
-        // stubs away from node top/bottom edges
-        qreal portBandHeight = nodeH - 2.0 * portMargin;
-
-        for (auto it = outgoingEdges.constBegin(); it != outgoingEdges.constEnd(); ++it)
-        {
-            const QVector<int>& idx = it.value();
-            int n = idx.size();
-            TaskNodeItem* node = edges[idx[0]].from;
-            qreal ny = node->pos().y();
-            qreal nx = node->pos().x();
-            for (int j = 0; j < n; ++j)
-            {
-                qreal portY = ny + portMargin + (static_cast<qreal>(j) + 1.0)
-                             * portBandHeight / (static_cast<qreal>(n) + 1.0);
-                exitPort[idx[j]] = QPointF(nx + nodeW, portY);
-            }
-        }
-
-        for (auto it = incomingEdges.constBegin(); it != incomingEdges.constEnd(); ++it)
-        {
-            const QVector<int>& idx = it.value();
-            int n = idx.size();
-            TaskNodeItem* node = edges[idx[0]].to;
-            qreal ny = node->pos().y();
-            qreal nx = node->pos().x();
-            for (int j = 0; j < n; ++j)
-            {
-                qreal portY = ny + portMargin + (static_cast<qreal>(j) + 1.0)
-                             * portBandHeight / (static_cast<qreal>(n) + 1.0);
-                entryPort[idx[j]] = QPointF(nx, portY);
-            }
-        }
-
-        // --- Channel assignment ---
-        // Group edges by channel (source layer), spread vertical X across gap
-        QMap<int, QVector<int>> edgesByChannel;
-        for (int i = 0; i < edges.size(); ++i)
-            edgesByChannel[edges[i].channel].append(i);
-
-        QVector<qreal> channelX(edges.size());
-
-        for (auto it = edgesByChannel.begin(); it != edgesByChannel.end(); ++it)
-        {
-            QVector<int>& idx = it.value();
-
-            // Sort by midpoint Y of (exit, entry) to order channels
-            std::sort(idx.begin(), idx.end(), [&](int a, int b)
-            {
-                qreal midA = (exitPort[a].y() + entryPort[a].y()) * 0.5;
-                qreal midB = (exitPort[b].y() + entryPort[b].y()) * 0.5;
-                return midA < midB;
-            });
-
-            int n = idx.size();
-            // Gap runs from source right edge + margin to next layer left edge - margin
-            qreal gapStart = edges[idx[0]].from->pos().x() + nodeW + channelMargin;
-            qreal gapWidth = hGap - 2.0 * channelMargin;
-
-            for (int j = 0; j < n; ++j)
-            {
-                qreal cx = gapStart + (static_cast<qreal>(j) + 1.0)
-                         * gapWidth / (static_cast<qreal>(n) + 1.0);
-                channelX[idx[j]] = cx;
-            }
-        }
-
-        // --- Build orthogonal routes ---
-        for (int i = 0; i < edges.size(); ++i)
-        {
-            QPointF start = exitPort[i];
-            QPointF end = entryPort[i];
-            qreal cx = channelX[i];
-
-            QVector<QPointF> route;
-            route.append(start);
-            route.append(QPointF(cx, start.y()));
-            route.append(QPointF(cx, end.y()));
-            route.append(end);
-
-            auto* edge = new TaskEdgeItem(edges[i].from, edges[i].to);
-            edge->setRoute(route);
+            TaskNodeItem* fromNode = m_nodesByName[route.fromName].first();
+            TaskNodeItem* toNode = m_nodesByName[route.toName].first();
+            auto* edge = new TaskEdgeItem(fromNode, toNode);
+            edge->setLineColor(m_config.edgeLine);
+            edge->setArrowColor(m_config.edgeArrow);
+            edge->setHighlightColors(m_config.edgeHighlightIncoming,
+                                     m_config.edgeHighlightOutgoing);
+            edge->setRoute(route.points, route.exact);
             addItem(edge);
             m_edges.append(edge);
         }
+
+        // Debug overlay: draw the invisible routing waypoints.
+        // Toggle by hand via TASKGRAPH_DEBUG_DRAW_WAYPOINTS in TaskGraph_debug.h,
+        // or force on at runtime with the TASKGRAPH_DEBUG_WAYPOINTS env var.
+        if (TASKGRAPH_DEBUG_DRAW_WAYPOINTS
+            || qEnvironmentVariableIsSet("TASKGRAPH_DEBUG_WAYPOINTS"))
+        {
+            for (const QPointF& d : layout.dummyPoints)
+            {
+                auto* marker = addEllipse(d.x() - 5.0, d.y() - 5.0, 10.0, 10.0,
+                    QPen(Qt::NoPen), QBrush(m_config.debugWaypoint));
+                marker->setZValue(100.0);
+            }
+            for (const QPointF& a : layout.anchorPoints)
+            {
+                auto* marker = addEllipse(a.x() - 3.5, a.y() - 3.5, 7.0, 7.0,
+                    QPen(Qt::NoPen), QBrush(m_config.debugAnchor));
+                marker->setZValue(100.0);
+            }
+        }
+    }
+
+    void TaskGraphScene::setVisualConfig(const GraphVisualConfig& config)
+    {
+        m_config = config;
+        rebuild();
     }
 
     void TaskGraphScene::highlightEdgesForNode(const QString& taskName)
