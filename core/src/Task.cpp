@@ -20,7 +20,6 @@ namespace TaskGraph
         , m_timeoutMs(0)
         , m_maxRetries(0)
         , m_backoffMs(0)
-        , m_logger(std::make_unique<Log::LogObject>(std::string("Task")))
         , m_workFunction(nullptr)
         , m_workFunctionCtx(nullptr)
     {
@@ -38,7 +37,6 @@ namespace TaskGraph
         , m_timeoutMs(0)
         , m_maxRetries(0)
         , m_backoffMs(0)
-        , m_logger(std::make_unique<Log::LogObject>(name))
         , m_workFunction(nullptr)
         , m_workFunctionCtx(nullptr)
     {
@@ -51,12 +49,64 @@ namespace TaskGraph
     void Task::setName(const std::string& name)
     {
         m_name = name;
+        std::lock_guard<std::mutex> lock(m_loggerMutex);
         if (m_logger)
             m_logger->setName(name);
     }
 
-    Log::LogObject& Task::logger() { return *m_logger; }
-    const Log::LogObject& Task::logger() const { return *m_logger; }
+    Log::LogObject& Task::effectiveLogger() const
+    {
+        std::lock_guard<std::mutex> lock(m_loggerMutex);
+        if (m_loggerMode == LoggerMode::External)
+            return *m_externalLogger;
+        if (m_loggerMode == LoggerMode::None)
+        {
+            // One shared, disabled null-sink for all None-mode tasks: produces no output
+            // and registers a single context node rather than one per task.
+            static Log::LogObject sink(std::string("(disabled)"));
+            sink.setEnabled(false);
+            return sink;
+        }
+        if (!m_logger)
+            m_logger = std::make_unique<Log::LogObject>(m_name);
+        return *m_logger;
+    }
+
+    Log::LogObject* Task::effectiveLoggerOrNull() const
+    {
+        std::lock_guard<std::mutex> lock(m_loggerMutex);
+        if (m_loggerMode == LoggerMode::None)
+            return nullptr;
+        if (m_loggerMode == LoggerMode::External)
+            return m_externalLogger;
+        if (!m_logger)
+            m_logger = std::make_unique<Log::LogObject>(m_name);
+        return m_logger.get();
+    }
+
+    Log::LogObject& Task::logger() { return effectiveLogger(); }
+    const Log::LogObject& Task::logger() const { return effectiveLogger(); }
+
+    void Task::setExternalLogger(Log::LogObject* logger)
+    {
+        std::lock_guard<std::mutex> lock(m_loggerMutex);
+        if (logger)
+        {
+            m_externalLogger = logger;
+            m_loggerMode = LoggerMode::External;
+        }
+        else
+        {
+            m_externalLogger = nullptr;
+            m_loggerMode = LoggerMode::None;
+        }
+    }
+
+    bool Task::hasExternalLogger() const
+    {
+        std::lock_guard<std::mutex> lock(m_loggerMutex);
+        return m_loggerMode == LoggerMode::External;
+    }
 
     void Task::setWeight(float w)
     {
@@ -127,7 +177,7 @@ namespace TaskGraph
             return false;
         }
 
-        if (m_logger) m_logger->logInfo("Task started");
+        if (auto* lg = effectiveLoggerOrNull()) lg->logInfo("Task started");
         emit started();
         try
         {
@@ -143,7 +193,7 @@ namespace TaskGraph
         catch (const std::exception& e)
         {
             const QString msg = QString::fromUtf8(e.what());
-            if (m_logger) m_logger->logError(std::string("Task threw: ") + e.what());
+            if (auto* lg = effectiveLoggerOrNull()) lg->logError(std::string("Task threw: ") + e.what());
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
             emit failed(msg);
@@ -152,7 +202,7 @@ namespace TaskGraph
         catch (...)
         {
             const QString msg = QStringLiteral("Unknown exception");
-            if (m_logger) m_logger->logError("Task threw an unknown exception");
+            if (auto* lg = effectiveLoggerOrNull()) lg->logError("Task threw an unknown exception");
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
             emit failed(msg);
@@ -165,7 +215,7 @@ namespace TaskGraph
             const QString msg = QStringLiteral("timeout");
             setLastError(msg);
             m_status.store(Status::Failed, std::memory_order_release);
-            if (m_logger) m_logger->logError("Task timed out");
+            if (auto* lg = effectiveLoggerOrNull()) lg->logError("Task timed out");
             emit failed(msg);
             return false;
         }
@@ -173,11 +223,11 @@ namespace TaskGraph
         if (m_cancelRequested.load(std::memory_order_acquire))
         {
             m_status.store(Status::Cancelled, std::memory_order_release);
-            if (m_logger) m_logger->logWarning("Task cancelled");
+            if (auto* lg = effectiveLoggerOrNull()) lg->logWarning("Task cancelled");
             return false;
         }
 
-        if (m_logger) m_logger->logInfo("Task completed");
+        if (auto* lg = effectiveLoggerOrNull()) lg->logInfo("Task completed");
         m_status.store(Status::Done, std::memory_order_release);
         emit completed();
         return true;

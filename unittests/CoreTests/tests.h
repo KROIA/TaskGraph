@@ -26,3 +26,4 @@
 #include "tests/TST_RerunWithoutReset.h"
 #include "tests/TST_RemoveTask.h"
 #include "tests/TST_ContextFactory.h"
+#include "tests/TST_ExternalLogger.h"

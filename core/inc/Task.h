@@ -126,6 +126,15 @@ namespace TaskGraph
         Log::LogObject& logger();
         const Log::LogObject& logger() const;
 
+        /// <summary>
+        /// Route this task's logging through an external, caller-supplied logger instead of the
+        /// task-owned one. The Task does NOT take ownership. Pass nullptr to revert to the
+        /// task-owned logger. When set before first logger use, the task never constructs its own
+        /// LogObject (so no empty per-task context is registered).
+        /// </summary>
+        void setExternalLogger(Log::LogObject* logger);
+        bool hasExternalLogger() const;
+
         void setWorkFunction(const std::function<void()>& workFunction) { m_workFunction = workFunction; }
         void setWorkFunction(const std::function<void(TaskContext&)>& workFunction) { m_workFunctionCtx = workFunction; }
 
@@ -205,6 +214,13 @@ namespace TaskGraph
         bool wouldCreateCycle(const std::shared_ptr<Task>& candidate) const;
         void setLastError(const QString& err);
 
+        // Own: lazy task-owned logger (default). External: caller-supplied logger.
+        // None: no logging — no own LogObject, internal run logs suppressed.
+        enum class LoggerMode { Own, External, None };
+
+        Log::LogObject& effectiveLogger() const;
+        Log::LogObject* effectiveLoggerOrNull() const;
+
         std::string m_name;
         std::atomic<Status> m_status;
         std::atomic<TaskAffinity> m_affinity;
@@ -217,7 +233,10 @@ namespace TaskGraph
         std::atomic<int> m_maxRetries;
         std::atomic<int64_t> m_backoffMs;
 
-        std::unique_ptr<Log::LogObject> m_logger;
+        mutable std::unique_ptr<Log::LogObject> m_logger;
+        Log::LogObject* m_externalLogger = nullptr;
+        LoggerMode m_loggerMode = LoggerMode::Own;
+        mutable std::mutex m_loggerMutex;
 
         std::function<void()> m_workFunction;
         std::function<void(TaskContext&)> m_workFunctionCtx;

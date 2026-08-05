@@ -377,6 +377,33 @@ scheduler.logger().logInfo("scheduler message");
 
 Log messages carry the task's `LoggerID` and can be filtered per-task in the GUI visualization.
 
+### Logger Routing (Own / External / None)
+
+A task's logger destination is tri-state, controlled by two methods:
+
+```cpp
+void setExternalLogger(Log::LogObject* logger); // &ext -> External, nullptr -> None
+bool hasExternalLogger() const;                 // true only in External mode
+```
+
+- **Own** (default -- setter never called): the task lazily creates and registers its own
+  `Log::LogObject` on first use/run (not in the constructor). `logger()` and
+  `TaskContext::log()` use it.
+- **External** (`setExternalLogger(&ext)`): `logger()`, `TaskContext::log()`, and the task's
+  internal run messages ("started", "completed", etc.) all route to `ext`. The task does NOT
+  take ownership. If set before first use, the task never constructs its own `LogObject`, so no
+  empty per-task context appears in the log view.
+- **None** (`setExternalLogger(nullptr)`): the task creates no own logger and emits no logs.
+  Internal run lines are suppressed, and `log()` returns a shared, disabled sink so existing
+  `ctx.log().logInfo(...)` call sites remain safe no-ops.
+
+```cpp
+// Funnel all task output into one run logger:
+task->setExternalLogger(&runLogger);
+// Silence a task entirely (no own logger, no context node spam):
+task->setExternalLogger(nullptr);
+```
+
 ## GUI Round-Trip
 
 A worker task can request input from the GUI thread:
