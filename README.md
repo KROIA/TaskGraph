@@ -1,5 +1,13 @@
 # TaskGraph
 
+<p align="center">
+  <img src="documentation/images/ExampleGraph.png"
+       alt="TaskGraph — live visualization of a 36-task dependency graph with spline edge routing"
+       width="95%">
+</p>
+
+<p align="center"><em>The bundled <code>LibraryExample</code>: a 36-task, 8-layer dependency graph rendered live by <code>TaskGraph::Gui::TaskGraphWidget</code> — layered layout, smooth spline edges, and a fully configurable visual theme.</em></p>
+
 A C++23 / Qt5 task-graph scheduler library. Define tasks as nodes in a directed acyclic graph, wire up dependencies, and run them in parallel on a thread pool with ready-queue dispatch. TaskGraph provides GUI-thread integration via Qt's queued signal/slot mechanism, per-task logging through the Logger dependency, cooperative cancellation, error isolation, retries with backoff, timeouts, weighted float progress, result passing, pause/resume, dynamic child spawning at runtime, and an optional live Qt visualization widget (`TaskGraph::Gui`).
 
 ## Features
@@ -20,7 +28,9 @@ A C++23 / Qt5 task-graph scheduler library. Define tasks as nodes in a directed 
 - **Per-task logging** -- each `Task` has its own `Log::LogObject` via `task->logger()`; `ctx.log()` in bodies; scheduler-level `scheduler.logger()`
 - **GUI round-trip** -- `ctx.askGui(payload)` blocks a worker until the GUI thread responds via `respondToGuiEvent`; cancellation-aware
 - **Pluggable context** -- `scheduler.setContextFactory(...)` supplies an app-specific `TaskContext` subclass to every task body without templatizing the scheduler
-- **Qt visualization** -- drop-in `TaskGraphWidget` with orthogonal edge routing, live status recolor, control bar, inspector panel, log views, and interactive editing (see [Qt Visualization Widget](#qt-visualization-widget))
+- **Qt visualization** -- drop-in `TaskGraphWidget` with layered layout, smooth spline edge routing, live status recolor, control bar, inspector panel, log views, and interactive editing (see [Qt Visualization Widget](#qt-visualization-widget))
+- **Runtime read-only / viewer mode** -- flip a live widget between full editing and pure viewer with `setReadOnly(bool)` or the built-in "Viewer Mode" toggle
+- **Configurable visuals** -- `GraphVisualConfig` controls every color (nodes, edges, background, per-status fills), the edge-routing waypoint style, and ships `light()` / `dark()` presets
 
 ## Requirements and Build
 
@@ -396,7 +406,7 @@ On cancellation, `askGui` returns an invalid `QVariant` and the worker can exit 
 
 ## Qt Visualization Widget
 
-`TaskGraph::Gui::TaskGraphWidget` is a drop-in Qt widget that renders the task DAG with live execution state, orthogonal edge routing, a control bar, inspector panel, log views, and optional graph editing.
+`TaskGraph::Gui::TaskGraphWidget` is a drop-in Qt widget that renders the task DAG with live execution state, a control bar, inspector panel, log views, and optional graph editing. Layout is a layered (Sugiyama-style) assignment with dummy waypoints for long edges and coordinate straightening; edges are drawn as smooth splines that enter and leave nodes horizontally (see the screenshot at the top of this README).
 
 ```cpp
 #include "gui/TaskGraphWidget.h"
@@ -430,12 +440,69 @@ auto factory = TaskGraph::Gui::makeFactory(fs);
 TaskGraph::Gui::TaskGraphWidget widget(&scheduler, factory);
 ```
 
+### Read-only / viewer mode
+
+Any widget can be locked into a pure viewer at runtime -- editing controls hide and Run/Cancel/Reset are disabled -- without rebuilding it:
+
+```cpp
+widget.setReadOnly(true);   // lock to viewer: no editing, no run controls
+widget.setReadOnly(false);  // restore the factory's features
+bool ro = widget.isReadOnly();
+
+QObject::connect(&widget, &TaskGraph::Gui::TaskGraphWidget::readOnlyChanged,
+    [](bool readOnly) { /* update your chrome */ });
+```
+
+The monitor/editor control bar also exposes a **"Viewer Mode"** toggle button that drives this. For a widget that should be read-only from the start, construct it with `presetViewOnlyFactory()`.
+
+### Visual configuration
+
+`GraphVisualConfig` controls the view's colors and the edge-routing waypoint style. Apply it at runtime with `setVisualConfig`; read the current one back with `visualConfig()`. The widget defaults to `GraphVisualConfig::light()`.
+
+```cpp
+#include "gui/GraphVisualConfig.h"
+using TaskGraph::Gui::GraphVisualConfig;
+
+widget.setVisualConfig(GraphVisualConfig::dark());   // built-in dark theme
+
+// Or start from a preset, tweak fields, and apply
+GraphVisualConfig cfg = GraphVisualConfig::light();
+cfg.background    = QColor(20, 24, 28);
+cfg.statusRunning = QColor(255, 200, 0);
+cfg.edgeLine      = QColor(150, 150, 150);
+widget.setVisualConfig(cfg);
+```
+
+All fields are public on the struct:
+
+| Group | Fields |
+|---|---|
+| Waypoint style | `waypointMode` (`ColumnWaypointMode::TwoEdges` \| `OneCenter`), `leftWaypointExact`, `rightWaypointExact`, `centerWaypointExact`, `portAnchorExact` |
+| Background | `background` |
+| Nodes | `nodeBorder`, `nodeText`, and per-status fills `statusPending`, `statusReady`, `statusRunning`, `statusDone`, `statusFailed`, `statusCancelled`, `statusSkipped` |
+| Edges | `edgeLine`, `edgeArrow`, `edgeHighlightIncoming`, `edgeHighlightOutgoing` |
+| Debug overlay | `debugWaypoint`, `debugAnchor` |
+
+**Waypoint routing.** For each node column a long edge crosses, the router places waypoints that shape the spline. `TwoEdges` (default) puts a waypoint at each column edge so the edge crosses the column as a flat, clear horizontal run; `OneCenter` uses a single mid-column waypoint. The `*Exact` flags decide whether the spline passes **through** a waypoint (exact / interpolated) or merely uses it as a **steering** handle (approximated); `portAnchorExact` does the same for the short horizontal stub at each node edge that keeps arrows perpendicular. Both presets set all four flags to `true`.
+
+`GraphVisualConfig::light()` and `dark()` return ready-made themes; build your own by copying either and overriding fields. The `LibraryExample` app includes a dockable **Visuals** panel that live-edits every one of these fields as a working demo.
+
+### Debug overlay
+
+The otherwise-invisible routing waypoints can be drawn for debugging (red = column waypoints, blue = port anchors). Toggle it by hand in `TaskGraph_debug.h`:
+
+```cpp
+#define TASKGRAPH_DEBUG_DRAW_WAYPOINTS 1   // 0 = off (default)
+```
+
+or force it on at runtime without a rebuild by setting the `TASKGRAPH_DEBUG_WAYPOINTS` environment variable. Marker colors come from `GraphVisualConfig::debugWaypoint` / `debugAnchor`.
+
 ### Interaction
 
 - **Single click** a node to select it, populate the inspector, and highlight connected edges (blue = incoming dependencies, amber = outgoing dependents)
 - **Double click** a node to open the per-task log overlay with a leader line
 - **Middle-click drag** to pan; **scroll wheel** to zoom
-- **Control bar** provides Run, Cancel, Reset, and thread/progress display
+- **Control bar** provides Run, Cancel, Reset, thread/progress display, and a **Viewer Mode** toggle that locks the widget to read-only
 - **Inspector panel** shows task config (affinity, weight, timeout, retries) and dependencies; editable when idle with editor features enabled
 - Editing is gated by `UiMode`: structural edits are disabled while the scheduler is running, except "Spawn Child" which calls `addDynamicTask`
 
@@ -449,7 +516,7 @@ The visualization layer (`TaskGraph::Gui`) is an evolving prototype. The visual 
 build\Debug\LibraryExample.exe
 ```
 
-The example builds a multi-task DAG with varied weights, timeouts, retries, and a GUI round-trip task, then displays the editor widget.
+The example builds the 36-task, 8-layer DAG shown at the top of this README -- with varied weights, timeouts, retries, many skip-layer dependencies, and a GUI round-trip task -- then displays it in the editor widget. A toolbar toggles a dockable **Visuals** panel that live-edits the whole `GraphVisualConfig` (preset, waypoint mode, per-waypoint exact/approximate flags, and every color), and the control bar's **Viewer Mode** button demonstrates the runtime read-only lock.
 
 ### Unit tests
 
@@ -485,4 +552,4 @@ TaskGraph/
 
 The public core API (`TaskGraph::Task`, `TaskGraph::TaskScheduler`, `TaskGraph::TaskContext`, `TaskGraph::TaskGroup`) is considered additive on the 1.x line -- existing signatures will not be removed or changed incompatibly.
 
-`TaskGraph::Gui` is **experimental**. The widget API (`TaskGraphWidget` constructor, preset factories, `FeatureSet`) is expected to remain stable, but visual layout, interaction behavior, and internal component classes may change without notice.
+`TaskGraph::Gui` is **experimental**. The widget API (`TaskGraphWidget` constructor, `setReadOnly`, `setVisualConfig`, preset factories, `FeatureSet`, `GraphVisualConfig`) is expected to remain stable, but the internal layout/routing algorithm, interaction behavior, and internal component classes may change without notice.
