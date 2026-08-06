@@ -7,11 +7,14 @@ namespace TaskGraph
 {
 namespace Gui
 {
-    TaskNodeItem::TaskNodeItem(const QString& name, QGraphicsItem* parent)
+    TaskNodeItem::TaskNodeItem(const QString& name, const QString& description,
+                               QGraphicsItem* parent)
         : QGraphicsObject(parent)
         , m_name(name)
+        , m_description(description)
     {
         setFlag(QGraphicsItem::ItemIsSelectable, true);
+        setToolTip(description.isEmpty() ? QString() : description);
     }
 
     QRectF TaskNodeItem::boundingRect() const

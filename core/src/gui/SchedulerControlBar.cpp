@@ -26,21 +26,16 @@ namespace Gui
         m_progressBar->setRange(0, 100);
         m_progressBar->setValue(0);
         m_threadLabel = new QLabel("Threads: 0/0", this);
-        m_viewerToggle = new QPushButton("Viewer Mode", this);
-        m_viewerToggle->setCheckable(true);
-        m_viewerToggle->setChecked(false);
 
         layout->addWidget(m_runBtn);
         layout->addWidget(m_cancelBtn);
         layout->addWidget(m_resetBtn);
         layout->addWidget(m_progressBar, 1);
         layout->addWidget(m_threadLabel);
-        layout->addWidget(m_viewerToggle);
 
         connect(m_runBtn, &QPushButton::clicked, this, &SchedulerControlBar::onRunClicked);
         connect(m_cancelBtn, &QPushButton::clicked, this, &SchedulerControlBar::onCancelClicked);
         connect(m_resetBtn, &QPushButton::clicked, this, &SchedulerControlBar::onResetClicked);
-        connect(m_viewerToggle, &QPushButton::toggled, this, &SchedulerControlBar::viewerModeToggled);
 
         connect(m_scheduler, &TaskScheduler::progressUpdate, this, &SchedulerControlBar::onProgressUpdate);
 
@@ -55,6 +50,13 @@ namespace Gui
         m_runBtn->setEnabled(enabled);
         m_cancelBtn->setEnabled(enabled);
         m_resetBtn->setEnabled(enabled);
+    }
+
+    void SchedulerControlBar::setRunControlsVisible(bool visible)
+    {
+        m_runBtn->setVisible(visible);
+        m_cancelBtn->setVisible(visible);
+        m_resetBtn->setVisible(visible);
     }
 
     void SchedulerControlBar::onRunClicked()

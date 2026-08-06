@@ -15,7 +15,8 @@ namespace Gui
     {
         Q_OBJECT
     public:
-        TaskNodeItem(const QString& name, QGraphicsItem* parent = nullptr);
+        TaskNodeItem(const QString& name, const QString& description = QString(),
+                     QGraphicsItem* parent = nullptr);
 
         QRectF boundingRect() const override;
         void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
@@ -37,6 +38,7 @@ namespace Gui
         QColor colorForStatus(Task::Status status) const;
 
         QString m_name;
+        QString m_description;
         Task::Status m_status = Task::Status::Pending;
         static constexpr qreal kWidth = 140.0;
         static constexpr qreal kHeight = 50.0;

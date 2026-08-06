@@ -43,6 +43,8 @@ public:
 	{
 		auto* outer = new QVBoxLayout(this);
 
+		m_viewerMode = new QCheckBox("Viewer Mode", this);
+
 		m_preset = new QComboBox(this);
 		m_preset->addItem("Light");
 		m_preset->addItem("Dark");
@@ -57,6 +59,7 @@ public:
 		m_portExact   = new QCheckBox("Port anchor exact", this);
 
 		auto* form = new QFormLayout();
+		form->addRow(m_viewerMode);
 		form->addRow("Preset", m_preset);
 		form->addRow("Waypoint mode", m_mode);
 		form->addRow(m_leftExact);
@@ -92,6 +95,9 @@ public:
 		outer->addLayout(form);
 		outer->addWidget(new QLabel("Colors:", this));
 		outer->addWidget(scroll, 1);
+
+		connect(m_viewerMode, &QCheckBox::toggled, this,
+			[this](bool checked) { m_target->setReadOnly(checked); });
 
 		connect(m_preset, static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
 			this, [this](int idx)
@@ -178,6 +184,7 @@ private:
 
 	TaskGraph::Gui::TaskGraphWidget* m_target;
 	GVC m_cfg;
+	QCheckBox* m_viewerMode;
 	QComboBox* m_preset;
 	QComboBox* m_mode;
 	QCheckBox* m_leftExact;
@@ -279,14 +286,29 @@ int main(int argc, char* argv[])
 	// skip-layer edge routing. Every non-root task takes one adjacent (previous
 	// layer) dependency to fix its layer, plus several skip dependencies that
 	// reach back 2-5 layers.
+	auto layerOf = [](int i) -> int {
+		if (i <= 5)  return 0;
+		if (i <= 10) return 1;
+		if (i <= 15) return 2;
+		if (i <= 20) return 3;
+		if (i <= 25) return 4;
+		if (i <= 29) return 5;
+		if (i <= 33) return 6;
+		return 7;
+	};
+
 	std::vector<std::shared_ptr<TestTask>> t;
 	for (int i = 1; i <= 36; ++i)
 	{
 		auto task = std::make_shared<TestTask>("Task" + std::to_string(i));
+		task->setDescription("Task" + std::to_string(i)
+			+ ": demo worker node in layer L" + std::to_string(layerOf(i))
+			+ " of the 8-layer graph.");
 		scheduler.addTask(task);
 		t.push_back(task);
 	}
 	auto askTask = std::make_shared<AskGuiTask>(std::string("AskGuiTask"));
+	askTask->setDescription("AskGuiTask: blocks mid-graph for GUI input, then completes.");
 	scheduler.addTask(askTask);
 
 	// 1-based accessor: T(n) is "Taskn"

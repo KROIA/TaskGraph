@@ -21,9 +21,7 @@ namespace Gui
         explicit SchedulerControlBar(TaskScheduler* scheduler, QWidget* parent = nullptr);
 
         void setRunControlsEnabled(bool enabled);
-
-    signals:
-        void viewerModeToggled(bool readOnly);
+        void setRunControlsVisible(bool visible);
 
     private slots:
         void onRunClicked();
@@ -39,7 +37,6 @@ namespace Gui
         QPushButton* m_resetBtn;
         QProgressBar* m_progressBar;
         QLabel* m_threadLabel;
-        QPushButton* m_viewerToggle;
     };
 }
 }

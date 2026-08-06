@@ -13,6 +13,8 @@
 #include <QComboBox>
 #include <QPushButton>
 #include <QListWidget>
+#include <QPlainTextEdit>
+#include <QGroupBox>
 #include <QInputDialog>
 #include <QMessageBox>
 
@@ -56,6 +58,7 @@ namespace Gui
 
         m_formContainer = new QWidget(this);
         auto* form = new QFormLayout(m_formContainer);
+        m_form = form;
         form->setContentsMargins(0, 4, 0, 0);
         form->setSpacing(4);
         form->setLabelAlignment(Qt::AlignRight);
@@ -118,7 +121,11 @@ namespace Gui
         depBtnRow->addWidget(m_addDepBtn);
         depsLayout->addLayout(depBtnRow);
 
-        form->addRow("Dependencies:", m_depsContainer);
+        // Dependencies: plain header on its own line, list + add/remove controls
+        // stacked full-width beneath it (same layout style as Description).
+        m_depsHeader = new QLabel("Dependencies", m_formContainer);
+        form->addRow(m_depsHeader);
+        form->addRow(m_depsContainer);
 
         connect(m_removeDepBtn, &QPushButton::clicked, this, &TaskInspectorPanel::onRemoveDependency);
         connect(m_addDepBtn, &QPushButton::clicked, this, &TaskInspectorPanel::onAddDependency);
@@ -130,6 +137,23 @@ namespace Gui
 
         m_resultValue = new QLabel(m_formContainer);
         form->addRow("Result:", m_resultValue);
+
+        // Description: edit mode shows a plain header + full-width editor; view mode
+        // swaps in a framed, titled QGroupBox holding the word-wrapped label.
+        m_descHeader = new QLabel("Description", m_formContainer);
+        form->addRow(m_descHeader);
+
+        m_descEdit = new QPlainTextEdit(m_formContainer);
+        m_descEdit->setMaximumHeight(72);
+        form->addRow(m_descEdit);
+
+        m_descGroup = new QGroupBox("Description", m_formContainer);
+        auto* descGroupLayout = new QVBoxLayout(m_descGroup);
+        descGroupLayout->setContentsMargins(6, 4, 6, 6);
+        m_descLabel = new QLabel(m_descGroup);
+        m_descLabel->setWordWrap(true);
+        descGroupLayout->addWidget(m_descLabel);
+        form->addRow(m_descGroup);
 
         outerLayout->addWidget(m_formContainer);
         outerLayout->addStretch(1);
@@ -147,6 +171,8 @@ namespace Gui
                 this, [this](int) { applyConfigChanges(); });
         connect(m_backoffSpin, QOverload<int>::of(&QSpinBox::valueChanged),
                 this, [this](int) { applyConfigChanges(); });
+        connect(m_descEdit, &QPlainTextEdit::textChanged,
+                this, [this]() { applyConfigChanges(); });
 
         // live updates
         connect(m_scheduler, &TaskScheduler::taskStarted, this, [this](QString name) {
@@ -169,6 +195,16 @@ namespace Gui
         setEditingEnabled(m_idle);
     }
 
+    void TaskInspectorPanel::setRowVisible(QWidget* field, bool visible)
+    {
+        field->setVisible(visible);
+        if (m_form)
+        {
+            if (QWidget* label = m_form->labelForField(field))
+                label->setVisible(visible);
+        }
+    }
+
     void TaskInspectorPanel::setEditingEnabled(bool idle)
     {
         m_idle = idle;
@@ -177,11 +213,31 @@ namespace Gui
         bool canAdd = m_features.has(Feature::EditAddTask);
         bool canRemove = idle && m_features.has(Feature::EditRemoveTask);
 
+        // View mode strips the edit features: hide the editing rows entirely
+        // (widget + its form label) rather than showing greyed-out controls.
+        bool showConfig = m_features.has(Feature::EditTaskConfig);
+        bool showDeps = m_features.has(Feature::EditDependencies);
+
+        setRowVisible(m_affinityCombo, showConfig);
+        setRowVisible(m_weightSpin, showConfig);
+        setRowVisible(m_timeoutSpin, showConfig);
+        setRowVisible(m_retriesSpin, showConfig);
+        setRowVisible(m_backoffSpin, showConfig);
+        // Deps rows are full-width (no left label); hide header + container together.
+        m_depsHeader->setVisible(showDeps);
+        m_depsContainer->setVisible(showDeps);
+
         m_affinityCombo->setEnabled(canEditConfig);
         m_weightSpin->setEnabled(canEditConfig);
         m_timeoutSpin->setEnabled(canEditConfig);
         m_retriesSpin->setEnabled(canEditConfig);
         m_backoffSpin->setEnabled(canEditConfig);
+
+        // Edit mode: plain header + editable editor. View mode: framed, titled
+        // group box (its own title replaces the plain header) with a static label.
+        m_descHeader->setVisible(showConfig);
+        m_descEdit->setVisible(showConfig);
+        m_descGroup->setVisible(!showConfig);
 
         m_removeDepBtn->setEnabled(canEditDeps);
         m_addDepBtn->setEnabled(canEditDeps);
@@ -282,6 +338,10 @@ namespace Gui
         bool hasResult = m_currentTask->getResult().has_value();
         m_resultValue->setText(hasResult ? "present" : "empty");
 
+        QString desc = QString::fromStdString(m_currentTask->getDescription());
+        m_descEdit->setPlainText(desc);
+        m_descLabel->setText(desc);
+
         m_blockSignals = false;
     }
 
@@ -334,6 +394,8 @@ namespace Gui
         m_currentTask->setMaxRetries(m_retriesSpin->value());
         m_currentTask->setRetryBackoff(
             std::chrono::milliseconds(m_backoffSpin->value()));
+        if (m_features.has(Feature::EditTaskConfig))
+            m_currentTask->setDescription(m_descEdit->toPlainText().toStdString());
     }
 
     void TaskInspectorPanel::onRemoveDependency()

@@ -22,6 +22,14 @@ namespace Gui
         void clearLeader();
         void setOverlay(TaskLogOverlay* overlay);
 
+        // Keep the sceneRect padded well beyond the viewport so AnchorUnderMouse
+        // always has scroll room (Qt otherwise re-centers content when it fits).
+        void ensureSceneRectMargin();
+        // Re-pad and center the graph in the viewport (resting framing).
+        void frameGraph();
+        // Fit the entire graph content into the viewport at maximum zoom.
+        void fitGraph();
+
     signals:
         void nodeSelected(QString name);
         void nodeDoubleClicked(QString name);
@@ -32,9 +40,13 @@ namespace Gui
         void mouseDoubleClickEvent(QMouseEvent* event) override;
         void mouseMoveEvent(QMouseEvent* event) override;
         void mouseReleaseEvent(QMouseEvent* event) override;
+        void keyPressEvent(QKeyEvent* event) override;
+        void resizeEvent(QResizeEvent* event) override;
+        void showEvent(QShowEvent* event) override;
         void drawForeground(QPainter* painter, const QRectF& rect) override;
 
     private:
+        bool m_initialFramed = false;
         bool m_panning = false;
         QPoint m_lastPanPos;
 

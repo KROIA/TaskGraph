@@ -41,7 +41,8 @@ namespace Gui
             for (const auto& task : layer)
             {
                 QString name = QString::fromStdString(task->getName());
-                auto* node = new TaskNodeItem(name);
+                auto* node = new TaskNodeItem(
+                    name, QString::fromStdString(task->getDescription()));
                 if (layout.nodePositions.contains(name))
                     node->setPos(layout.nodePositions.value(name));
                 node->setPalette(m_config.nodeBorder, m_config.nodeText);

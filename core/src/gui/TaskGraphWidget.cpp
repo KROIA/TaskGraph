@@ -35,6 +35,9 @@ namespace Gui
 
         m_scene->setVisualConfig(m_visualConfig);
         setUiIdle(true);
+
+        if (m_view)
+            m_view->frameGraph();
     }
 
     void TaskGraphWidget::setVisualConfig(const GraphVisualConfig& config)
@@ -135,12 +138,6 @@ namespace Gui
                     this, &TaskGraphWidget::onNodeDoubleClicked);
         }
 
-        if (m_controlBar)
-        {
-            connect(m_controlBar, &SchedulerControlBar::viewerModeToggled,
-                    this, &TaskGraphWidget::setReadOnly);
-        }
-
         if (m_view && m_logOverlay)
         {
             m_view->setOverlay(m_logOverlay);
@@ -181,12 +178,16 @@ namespace Gui
             if (m_inspector)
                 m_inspector->clearSelection();
             setUiIdle(true);
+            if (m_view)
+                m_view->frameGraph();
         });
 
         connect(m_scheduler, &TaskScheduler::started, this, [this]() {
             m_scene->rebuild();
             registerTaskLoggers();
             setUiIdle(false);
+            if (m_view)
+                m_view->frameGraph();
         });
 
         connect(m_scheduler, &TaskScheduler::completed, this, [this]() {
@@ -235,7 +236,7 @@ namespace Gui
         if (m_inspector)
             m_inspector->setFeatures(effective);
         if (m_controlBar)
-            m_controlBar->setRunControlsEnabled(!ro);
+            m_controlBar->setRunControlsVisible(!ro);
 
         emit readOnlyChanged(ro);
     }
@@ -284,6 +285,8 @@ namespace Gui
     {
         m_scene->rebuild();
         registerTaskLoggers();
+        if (m_view)
+            m_view->frameGraph();
     }
 }
 }

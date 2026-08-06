@@ -123,6 +123,9 @@ namespace TaskGraph
         const std::string& getName() const { return m_name; }
         void setName(const std::string& name);
 
+        const std::string& getDescription() const { return m_description; }
+        void setDescription(const std::string& description) { m_description = description; }
+
         Log::LogObject& logger();
         const Log::LogObject& logger() const;
 
@@ -222,6 +225,7 @@ namespace TaskGraph
         Log::LogObject* effectiveLoggerOrNull() const;
 
         std::string m_name;
+        std::string m_description;
         std::atomic<Status> m_status;
         std::atomic<TaskAffinity> m_affinity;
         std::atomic<bool> m_cancelRequested;
