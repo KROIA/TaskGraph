@@ -13,6 +13,9 @@
 #include "Task.h"
 #include <QVBoxLayout>
 #include <QSplitter>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QEvent>
 
 namespace TaskGraph
 {
@@ -103,14 +106,48 @@ namespace Gui
 
         if (m_inspector && graphArea)
         {
-            auto* hSplitter = new QSplitter(Qt::Horizontal, this);
-            hSplitter->addWidget(graphArea);
+            m_inspectorSplitter = new QSplitter(Qt::Horizontal, this);
+            m_inspectorSplitter->addWidget(graphArea);
+
             m_inspector->setMinimumWidth(220);
             m_inspector->setMaximumWidth(400);
-            hSplitter->addWidget(m_inspector);
-            hSplitter->setStretchFactor(0, 4);
-            hSplitter->setStretchFactor(1, 1);
-            outerLayout->addWidget(hSplitter, 1);
+            m_inspectorSplitter->addWidget(m_inspector);
+
+            m_inspectorSplitter->setStretchFactor(0, 4);
+            m_inspectorSplitter->setStretchFactor(1, 1);
+
+            outerLayout->addWidget(m_inspectorSplitter, 1);
+
+            // Collapse/expand toggle floats over the right edge of the graph
+            // view (overlapping the boundary between the view and inspector)
+            // instead of occupying its own splitter column.
+            m_inspectorToggle = new QPushButton(m_view ? static_cast<QWidget*>(m_view)
+                                                       : static_cast<QWidget*>(this));
+            m_inspectorToggle->setCheckable(true);
+            m_inspectorToggle->setFixedSize(22, 40);
+            m_inspectorToggle->setStyleSheet(
+                "QPushButton { color: palette(text); background: palette(button); "
+                "border: 1px solid palette(mid); border-radius: 3px; "
+                "font-size: 14px; font-weight: bold; }"
+                "QPushButton:hover { background: palette(midlight); }");
+
+            connect(m_inspectorToggle, &QPushButton::toggled,
+                    this, &TaskGraphWidget::setInspectorExpanded);
+
+            // Reposition the floating toggle whenever the view is resized/shown.
+            if (m_view)
+            {
+                m_view->installEventFilter(this);
+                if (m_view->viewport())
+                    m_view->viewport()->installEventFilter(this);
+            }
+
+            m_inspectorToggle->show();
+            m_inspectorToggle->raise();
+            positionInspectorToggle();
+
+            // Collapsed by default.
+            setInspectorExpanded(false);
         }
         else if (m_inspector)
         {
@@ -120,6 +157,82 @@ namespace Gui
         {
             outerLayout->addWidget(graphArea, 1);
         }
+    }
+
+    void TaskGraphWidget::setInspectorExpanded(bool expanded)
+    {
+        m_inspectorExpanded = expanded;
+
+        if (m_inspector)
+            m_inspector->setVisible(expanded);
+
+        if (m_inspectorToggle)
+        {
+            QSignalBlocker block(m_inspectorToggle);
+            m_inspectorToggle->setChecked(expanded);
+            // Encoding-safe triangle glyphs built from explicit code points
+            // (no raw non-ASCII bytes in the source). Collapsed shows a
+            // left-pointing triangle (click to open); expanded shows a
+            // right-pointing triangle (click to close).
+            m_inspectorToggle->setText(expanded ? QString(QChar(0x25B6))
+                                                 : QString(QChar(0x25C0)));
+            m_inspectorToggle->setToolTip(expanded ? tr("Hide inspector")
+                                                    : tr("Show inspector"));
+        }
+
+        if (expanded && m_inspectorSplitter)
+        {
+            QList<int> sizes = m_inspectorSplitter->sizes();
+            if (sizes.size() == 2 && sizes[1] <= 0)
+            {
+                int total = m_inspectorSplitter->width();
+                int insp = 300;
+                int graph = total - insp;
+                if (graph < 0)
+                    graph = 0;
+                m_inspectorSplitter->setSizes({ graph, insp });
+            }
+        }
+
+        // Keep the floating toggle glued to the view's right edge and on top
+        // after the inspector is shown/hidden.
+        positionInspectorToggle();
+    }
+
+    void TaskGraphWidget::positionInspectorToggle()
+    {
+        if (!m_inspectorToggle || !m_view)
+            return;
+
+        // Width of the visible graph area (viewport gives the content edge).
+        int viewWidth = m_view->viewport()
+            ? m_view->viewport()->width()
+            : m_view->width();
+
+        int btnW = m_inspectorToggle->width();
+
+        // Pin flush to the right edge, allowing a slight overhang so it reads
+        // as sitting on the boundary next to the inspector. Kept near the top.
+        int x = viewWidth - btnW + 2;
+        int y = 4; // small top margin: pin the toggle near the top edge
+
+        m_inspectorToggle->move(x, y);
+        m_inspectorToggle->raise();
+    }
+
+    bool TaskGraphWidget::eventFilter(QObject* watched, QEvent* event)
+    {
+        if (m_view &&
+            (watched == m_view ||
+             (m_view->viewport() && watched == m_view->viewport())))
+        {
+            if (event->type() == QEvent::Resize ||
+                event->type() == QEvent::Show)
+            {
+                positionInspectorToggle();
+            }
+        }
+        return QWidget::eventFilter(watched, event);
     }
 
     void TaskGraphWidget::wireComponents()

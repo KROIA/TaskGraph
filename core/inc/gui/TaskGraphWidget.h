@@ -6,6 +6,9 @@
 #include <memory>
 #include <QWidget>
 
+class QSplitter;
+class QPushButton;
+
 namespace TaskGraph
 {
     class TaskScheduler;
@@ -36,6 +39,9 @@ namespace Gui
         void setVisualConfig(const GraphVisualConfig& config);
         const GraphVisualConfig& visualConfig() const { return m_visualConfig; }
 
+    protected:
+        bool eventFilter(QObject* watched, QEvent* event) override;
+
     signals:
         void readOnlyChanged(bool);
 
@@ -47,6 +53,8 @@ namespace Gui
     private:
         void createComponents();
         void buildLayout();
+        void setInspectorExpanded(bool expanded);
+        void positionInspectorToggle();
         void wireComponents();
         void wireScheduler();
         void registerTaskLoggers();
@@ -59,6 +67,9 @@ namespace Gui
         TaskGraphView* m_view = nullptr;
         SchedulerControlBar* m_controlBar = nullptr;
         TaskInspectorPanel* m_inspector = nullptr;
+        QSplitter* m_inspectorSplitter = nullptr;
+        QPushButton* m_inspectorToggle = nullptr;
+        bool m_inspectorExpanded = false;
         QWidget* m_logView = nullptr;
         AggregateTaskLogView* m_aggregateLogView = nullptr;
         TaskLogOverlay* m_logOverlay = nullptr;
