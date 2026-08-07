@@ -25,7 +25,7 @@ A C++23 / Qt5 task-graph scheduler library. Define tasks as nodes in a directed 
 - **Pause / resume** -- `scheduler.pause()` / `scheduler.resume()`
 - **Dynamic spawn** -- `ctx.spawn(child)` from within a running task body; `scheduler.addDynamicTask(child, parent)` for external callers
 - **Remove task** -- `scheduler.removeTask(task)` while idle; detaches from all dependency lists
-- **Per-task logging** -- each `Task` has its own `Log::LogObject` via `task->logger()`; `ctx.log()` in bodies; scheduler-level `scheduler.logger()`
+- **Per-task logging** -- each `Task` has its own `Log::LogObject` via `task->logger()`; `ctx.log()` in bodies; optional caller-injected scheduler logger via `scheduler.logger()`
 - **GUI round-trip** -- `ctx.askGui(payload)` blocks a worker until the GUI thread responds via `respondToGuiEvent`; cancellation-aware
 - **Pluggable context** -- `scheduler.setContextFactory(...)` supplies an app-specific `TaskContext` subclass to every task body without templatizing the scheduler
 - **Qt visualization** -- drop-in `TaskGraphWidget` with layered layout, smooth spline edge routing, live status recolor, control bar, inspector panel, log views, and interactive editing (see [Qt Visualization Widget](#qt-visualization-widget))
@@ -370,12 +370,31 @@ logger().logError("failed to open file");
 
 // From within a TaskContext body (lambda)
 ctx.log().logInfo("...");
-
-// Scheduler-level logger
-scheduler.logger().logInfo("scheduler message");
 ```
 
 Log messages carry the task's `LoggerID` and can be filtered per-task in the GUI visualization.
+
+### Scheduler Logger
+
+The scheduler's logger is caller-injectable at construction and nullable:
+
+```cpp
+TaskScheduler(size_t threadCount = std::thread::hardware_concurrency(),
+              Log::LogObject* logger = nullptr);
+```
+
+Inject a logger to route scheduler-level messages into a log node you own:
+
+```cpp
+Log::LogObject runLog("run");
+TaskGraph::TaskScheduler scheduler(std::thread::hardware_concurrency(), &runLog);
+scheduler.logger().logInfo("scheduler message");   // routes to runLog
+```
+
+The caller retains ownership of any injected logger -- the scheduler does not own or destroy
+it. If no logger is passed at construction, the scheduler creates no logger and emits no logs;
+`scheduler.logger()` then returns a shared, disabled `(disabled)` sink, so it never returns
+null but logging through it is a no-op.
 
 ### Logger Routing (Own / External / None)
 

@@ -27,7 +27,7 @@ namespace TaskGraph
         };
     }
 
-    TaskScheduler::TaskScheduler(size_t threadCount)
+    TaskScheduler::TaskScheduler(size_t threadCount, Log::LogObject* logger)
         : QObject()
         , m_stopThreads(false)
         , m_busyThreads(0)
@@ -45,10 +45,17 @@ namespace TaskGraph
         , m_lastError(Error::noError)
         , m_failurePolicy(FailurePolicy::FailFast)
     {
-        m_logger = std::make_unique<Log::LogObject>(std::string("TaskScheduler"));
+        m_logger = logger;
     }
 
-    Log::LogObject& TaskScheduler::logger() { return *m_logger; }
+    Log::LogObject& TaskScheduler::logger()
+    {
+        if (m_logger)
+            return *m_logger;
+        static Log::LogObject sink(std::string("(disabled)"));
+        sink.setEnabled(false);
+        return sink;
+    }
 
     int TaskScheduler::allocateGuiRequestId()
     {
