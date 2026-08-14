@@ -190,7 +190,7 @@ namespace Gui
             {
                 m_mode = mode;
                 m_resizeStartGeom = geometry();
-                m_resizeStartPos = event->globalPos();
+                m_resizeStartPos = mapToGlobal(event->pos());
                 event->accept();
                 return;
             }
@@ -211,7 +211,7 @@ namespace Gui
         }
         if (m_mode == ResizingCorner || m_mode == ResizingRight || m_mode == ResizingBottom)
         {
-            QPoint delta = event->globalPos() - m_resizeStartPos;
+            QPoint delta = mapToGlobal(event->pos()) - m_resizeStartPos;
             QRect newGeom = m_resizeStartGeom;
 
             if (m_mode == ResizingRight || m_mode == ResizingCorner)
