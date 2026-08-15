@@ -14,6 +14,8 @@ class QComboBox;
 class QPushButton;
 class QListWidget;
 class QVBoxLayout;
+class QPlainTextEdit;
+class QGroupBox;
 
 namespace TaskGraph
 {
@@ -38,6 +40,8 @@ namespace Gui
 
     private:
         void refresh();
+        // Hide/show a QFormLayout field together with its label widget.
+        void setRowVisible(QWidget* field, bool visible);
         void rebuildDepsList();
         void applyConfigChanges();
         void onRemoveDependency();
@@ -56,12 +60,17 @@ namespace Gui
 
         QLabel* m_noSelectionLabel = nullptr;
         QWidget* m_formContainer = nullptr;
+        QFormLayout* m_form = nullptr;
 
         // read-only fields
         QLabel* m_nameValue = nullptr;
         QLabel* m_statusValue = nullptr;
         QLabel* m_errorValue = nullptr;
         QLabel* m_resultValue = nullptr;
+        QLabel* m_descHeader = nullptr;         // plain header, edit mode
+        QPlainTextEdit* m_descEdit = nullptr;   // edit mode
+        QGroupBox* m_descGroup = nullptr;       // framed container, view mode
+        QLabel* m_descLabel = nullptr;          // view mode (inside m_descGroup)
 
         // editable fields (EditTaskConfig)
         QComboBox* m_affinityCombo = nullptr;
@@ -71,6 +80,7 @@ namespace Gui
         QSpinBox* m_backoffSpin = nullptr;
 
         // dependency editing (EditDependencies)
+        QLabel* m_depsHeader = nullptr;
         QWidget* m_depsContainer = nullptr;
         QListWidget* m_depsList = nullptr;
         QPushButton* m_removeDepBtn = nullptr;

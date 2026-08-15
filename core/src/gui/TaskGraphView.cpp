@@ -5,6 +5,9 @@
 #include "gui/TaskLogOverlay.h"
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QKeyEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
 #include <QScrollBar>
 #include <QPainter>
 #include <QPen>
@@ -43,6 +46,15 @@ namespace Gui
         setRenderHint(QPainter::Antialiasing);
         setDragMode(QGraphicsView::NoDrag);
         setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+        setResizeAnchor(QGraphicsView::AnchorViewCenter);
+        // sceneRect is kept far larger than the viewport (ensureSceneRectMargin) so
+        // AnchorUnderMouse always has scroll room; hide the resulting scrollbars to
+        // keep the fit-zoom appearance clean. Anchoring/panning drive the (hidden)
+        // scrollbar values internally, so both still work.
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // Accept keyboard focus on click so Spacebar (fit-to-view) reaches the view.
+        setFocusPolicy(Qt::StrongFocus);
     }
 
     void TaskGraphView::setOverlay(TaskLogOverlay* overlay)
@@ -110,10 +122,77 @@ namespace Gui
         painter->restore();
     }
 
+    void TaskGraphView::ensureSceneRectMargin()
+    {
+        QRectF content = scene() ? scene()->itemsBoundingRect() : QRectF();
+        QRectF visible = mapToScene(viewport()->rect()).boundingRect();
+        QRectF base = content.united(visible);
+        // Pad generously so the transformed sceneRect stays larger than the
+        // viewport at every realistic zoom level; then AnchorUnderMouse never
+        // hits the fits-in-viewport centering path.
+        const qreal mx = base.width() * 2.0 + 2000.0;
+        const qreal my = base.height() * 2.0 + 2000.0;
+        setSceneRect(base.adjusted(-mx, -my, mx, my));
+    }
+
+    void TaskGraphView::frameGraph()
+    {
+        ensureSceneRectMargin();
+        if (scene())
+        {
+            QRectF content = scene()->itemsBoundingRect();
+            if (!content.isEmpty())
+                centerOn(content.center());
+        }
+    }
+
+    void TaskGraphView::fitGraph()
+    {
+        if (!scene())
+            return;
+        const QRectF content = scene()->itemsBoundingRect();
+        if (content.isEmpty())
+            return;
+        fitInView(content, Qt::KeepAspectRatio);
+        // Restore the large sceneRect margin so wheel-zoom-to-cursor keeps working.
+        ensureSceneRectMargin();
+    }
+
+    void TaskGraphView::keyPressEvent(QKeyEvent* event)
+    {
+        if (event->key() == Qt::Key_Space)
+        {
+            fitGraph();
+            event->accept();
+            return;
+        }
+        QGraphicsView::keyPressEvent(event);
+    }
+
     void TaskGraphView::wheelEvent(QWheelEvent* event)
     {
+        // Guarantee scroll room before scaling so the cursor anchor holds.
+        ensureSceneRectMargin();
         double factor = (event->angleDelta().y() > 0) ? 1.15 : (1.0 / 1.15);
         scale(factor, factor);
+    }
+
+    void TaskGraphView::resizeEvent(QResizeEvent* event)
+    {
+        QGraphicsView::resizeEvent(event);
+        ensureSceneRectMargin();
+    }
+
+    void TaskGraphView::showEvent(QShowEvent* event)
+    {
+        QGraphicsView::showEvent(event);
+        // Frame the graph once the viewport has its real (post-show) size;
+        // earlier framing from the constructor/rebuilds runs against an invalid size.
+        if (!m_initialFramed)
+        {
+            m_initialFramed = true;
+            fitGraph();
+        }
     }
 
     void TaskGraphView::mousePressEvent(QMouseEvent* event)

@@ -74,7 +74,7 @@ namespace TaskGraph
             ContinueOthers
         };
 
-        TaskScheduler(size_t threadCount = std::thread::hardware_concurrency());
+        TaskScheduler(size_t threadCount = std::thread::hardware_concurrency(), Log::LogObject* logger = nullptr);
         ~TaskScheduler();
 
         bool enableThreads(size_t threadCount);
@@ -225,7 +225,7 @@ namespace TaskGraph
             bool cancelled = false;
         };
 
-        std::unique_ptr<Log::LogObject> m_logger;
+        Log::LogObject* m_logger = nullptr;
         std::unordered_map<int, std::shared_ptr<PendingGuiRequest>> m_pendingGuiRequests;
         std::mutex m_pendingGuiMutex;
         std::atomic<int> m_nextGuiRequestId{1};

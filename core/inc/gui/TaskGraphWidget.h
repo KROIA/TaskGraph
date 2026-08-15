@@ -2,8 +2,12 @@
 
 #include "TaskGraph_global.h"
 #include "gui/ITaskGraphComponentFactory.h"
+#include "gui/GraphVisualConfig.h"
 #include <memory>
 #include <QWidget>
+
+class QSplitter;
+class QPushButton;
 
 namespace TaskGraph
 {
@@ -29,6 +33,18 @@ namespace Gui
             std::shared_ptr<ITaskGraphComponentFactory> factory = nullptr,
             QWidget* parent = nullptr);
 
+        void setReadOnly(bool ro);
+        bool isReadOnly() const { return m_readOnly; }
+
+        void setVisualConfig(const GraphVisualConfig& config);
+        const GraphVisualConfig& visualConfig() const { return m_visualConfig; }
+
+    protected:
+        bool eventFilter(QObject* watched, QEvent* event) override;
+
+    signals:
+        void readOnlyChanged(bool);
+
     private slots:
         void onNodeSelected(const QString& taskName);
         void onNodeDoubleClicked(const QString& taskName);
@@ -37,6 +53,8 @@ namespace Gui
     private:
         void createComponents();
         void buildLayout();
+        void setInspectorExpanded(bool expanded);
+        void positionInspectorToggle();
         void wireComponents();
         void wireScheduler();
         void registerTaskLoggers();
@@ -49,12 +67,18 @@ namespace Gui
         TaskGraphView* m_view = nullptr;
         SchedulerControlBar* m_controlBar = nullptr;
         TaskInspectorPanel* m_inspector = nullptr;
+        QSplitter* m_inspectorSplitter = nullptr;
+        QPushButton* m_inspectorToggle = nullptr;
+        bool m_inspectorExpanded = false;
         QWidget* m_logView = nullptr;
         AggregateTaskLogView* m_aggregateLogView = nullptr;
         TaskLogOverlay* m_logOverlay = nullptr;
         TaskLogBuffer* m_logBuffer = nullptr;
         GuiPromptService* m_promptService = nullptr;
+        FeatureSet m_baseFeatures;
+        GraphVisualConfig m_visualConfig = GraphVisualConfig::light();
         bool m_idle = true;
+        bool m_readOnly = false;
     };
 }
 }

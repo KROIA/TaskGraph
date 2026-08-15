@@ -20,6 +20,9 @@ namespace Gui
     public:
         explicit SchedulerControlBar(TaskScheduler* scheduler, QWidget* parent = nullptr);
 
+        void setRunControlsEnabled(bool enabled);
+        void setRunControlsVisible(bool visible);
+
     private slots:
         void onRunClicked();
         void onCancelClicked();

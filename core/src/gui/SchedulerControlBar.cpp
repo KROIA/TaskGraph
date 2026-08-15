@@ -45,6 +45,20 @@ namespace Gui
         timer->start(250);
     }
 
+    void SchedulerControlBar::setRunControlsEnabled(bool enabled)
+    {
+        m_runBtn->setEnabled(enabled);
+        m_cancelBtn->setEnabled(enabled);
+        m_resetBtn->setEnabled(enabled);
+    }
+
+    void SchedulerControlBar::setRunControlsVisible(bool visible)
+    {
+        m_runBtn->setVisible(visible);
+        m_cancelBtn->setVisible(visible);
+        m_resetBtn->setVisible(visible);
+    }
+
     void SchedulerControlBar::onRunClicked()
     {
         m_scheduler->runTasksAsync();
